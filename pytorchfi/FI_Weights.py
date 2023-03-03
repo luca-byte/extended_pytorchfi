@@ -159,7 +159,7 @@ def generate_fault_list_ber(path,pfi_model:FaultInjection, **kwargs):
             pfi_model.print_pytorchfi_layer_summary()            
             print(pfi_model.get_total_layers())
 
-            fault_dict['ber']=kwargs.get('BER')
+            # fault_dict['ber']=kwargs.get('BER')
 
             if kwargs.get('layer')!= None:
                 fault_dict['layer']=kwargs.get('layer')
@@ -174,6 +174,7 @@ def generate_fault_list_ber(path,pfi_model:FaultInjection, **kwargs):
 
             for i in (range(Num_trials)):
                 for brate in range(0,BER+1):
+                    fault_dict['ber']=brate
                     new_row=pd.DataFrame(fault_dict, index=[0])
                     f_list=pd.concat([f_list, new_row],ignore_index=True, sort=False)                                                        
                     i+=1
@@ -706,3 +707,19 @@ class FI_framework(object):
 
 
 
+
+class DatasetSampling(object):
+    def __init__(self,dataset,num_images):        
+        self.length=len(dataset)
+        self.num_images=num_images
+        self.indices=[]
+
+    def listindex(self):
+        self.indices=[]
+        for i in range(0,self.length):
+            if(i%50)<self.num_images:
+                self.indices.append(i)
+        return(self.indices)
+
+    def __len__(self):
+        return len(self.indices)
