@@ -439,81 +439,82 @@ class FI_report_classifier(object):
         self._FI_dictionary=self.load_report(faulty_file_report)
 
         for index in self._golden_dictionary:
-            ResTop1=""
-            ResTop5=""
-            self.Golden=self._golden_dictionary[index]
-            self.Faulty=self._FI_dictionary[index]
-                   
-            G_pred=torch.tensor(self.Golden['pred'],requires_grad=False).t()
-            G_clas=torch.tensor(self.Golden['clas'],requires_grad=False).t()
-            G_target=torch.tensor(self.Golden['target'],requires_grad=False)
-            batch_size = G_target.size(0)
+            if index in self._FI_dictionary:
+                ResTop1=""
+                ResTop5=""
+                self.Golden=self._golden_dictionary[index]
+                self.Faulty=self._FI_dictionary[index]
+                    
+                G_pred=torch.tensor(self.Golden['pred'],requires_grad=False).t()
+                G_clas=torch.tensor(self.Golden['clas'],requires_grad=False).t()
+                G_target=torch.tensor(self.Golden['target'],requires_grad=False)
+                batch_size = G_target.size(0)
 
-            maxk=max(topk)
-            mink=min(topk)
-            
-            FI_pred=torch.tensor(self.Faulty['pred'],requires_grad=False).t()
-            FI_clas=torch.tensor(self.Faulty['clas'],requires_grad=False).t()
-            FI_target=torch.tensor(self.Faulty['target'],requires_grad=False)
+                maxk=max(topk)
+                mink=min(topk)
+                
+                FI_pred=torch.tensor(self.Faulty['pred'],requires_grad=False).t()
+                FI_clas=torch.tensor(self.Faulty['clas'],requires_grad=False).t()
+                FI_target=torch.tensor(self.Faulty['target'],requires_grad=False)
 
-            CMPGolden=G_clas.eq(G_target[None])
-            CMPFaulty=FI_clas.eq(FI_target[None]) 
+                CMPGolden=G_clas.eq(G_target[None])
+                CMPFaulty=FI_clas.eq(FI_target[None]) 
 
-            self.Gacc1=CMPGolden[:mink].sum(dim=0,dtype=torch.float32)
-            self.Facc1=CMPFaulty[:mink].sum(dim=0,dtype=torch.float32)
-            self.Gacc5=CMPGolden[:maxk].sum(dim=0,dtype=torch.float32)
-            self.Facc5=CMPFaulty[:maxk].sum(dim=0,dtype=torch.float32)
+                self.Gacc1=CMPGolden[:mink].sum(dim=0,dtype=torch.float32)
+                self.Facc1=CMPFaulty[:mink].sum(dim=0,dtype=torch.float32)
+                self.Gacc5=CMPGolden[:maxk].sum(dim=0,dtype=torch.float32)
+                self.Facc5=CMPFaulty[:maxk].sum(dim=0,dtype=torch.float32)
 
-            CMPpredGoldFaulty=G_pred.eq(FI_pred).sum(dim=0,dtype=torch.float32)
-            CMPClasGoldFaulty=G_clas.eq(FI_clas).sum(dim=0,dtype=torch.float32)
-            ResTop1=[]
-            ResTop5=[]
+                CMPpredGoldFaulty=G_pred.eq(FI_pred).sum(dim=0,dtype=torch.float32)
+                CMPClasGoldFaulty=G_clas.eq(FI_clas).sum(dim=0,dtype=torch.float32)
+                ResTop1=[]
+                ResTop5=[]
 
-            for img in range(batch_size):                
-                if self.Gacc1[img] == self.Facc1[img]:
-                    if(CMPpredGoldFaulty[img] == CMPClasGoldFaulty[img]):
-                        self.T1_Masked+=1                
-                        ResTop1.append("Masked")
-                        # print(CMPpredGoldFaulty)
-                        # print(CMPClasGoldFaulty)
+                for img in range(batch_size):                
+                    if self.Gacc1[img] == self.Facc1[img]:
+                        if(CMPpredGoldFaulty[img] == CMPClasGoldFaulty[img]):
+                            self.T1_Masked+=1                
+                            ResTop1.append("Masked")
+                            # print(CMPpredGoldFaulty)
+                            # print(CMPClasGoldFaulty)
+                        else:
+                            self.T1_SDC+=1
+                            ResTop1.append("SDC")
                     else:
-                        self.T1_SDC+=1
-                        ResTop1.append("SDC")
-                else:
-                    self.T1_Critical+=1
-                    ResTop1.append("Critical")
+                        self.T1_Critical+=1
+                        ResTop1.append("Critical")
 
-                if self.Gacc5[img] == self.Facc5[img]:
-                    if(CMPpredGoldFaulty[img] == CMPClasGoldFaulty[img]):
-                        self.T5_Masked+=1
-                        ResTop5.append("Masked")
-                        # print(CMPpredGoldFaulty)
-                        # print(CMPClasGoldFaulty)
+                    if self.Gacc5[img] == self.Facc5[img]:
+                        if(CMPpredGoldFaulty[img] == CMPClasGoldFaulty[img]):
+                            self.T5_Masked+=1
+                            ResTop5.append("Masked")
+                            # print(CMPpredGoldFaulty)
+                            # print(CMPClasGoldFaulty)
+                        else:
+                            self.T5_SDC+=1
+                            ResTop5.append("SDC")
                     else:
-                        self.T5_SDC+=1
-                        ResTop5.append("SDC")
-                else:
-                    self.T5_Critical+=1
-                    ResTop5.append("Critical")
+                        self.T5_Critical+=1
+                        ResTop5.append("Critical")
 
-            self._FI_dictionary[index]['ResTop1']=ResTop1 
-            self._FI_dictionary[index]['ResTopk']=ResTop5 
+                self._FI_dictionary[index]['ResTop1']=ResTop1 
+                self._FI_dictionary[index]['ResTopk']=ResTop5 
 
 
-            gold_result_list = []
-            faul_result_list = []
-            for k in topk:
-                gold_correct_k = CMPGolden[:k].flatten().sum(dtype=torch.float32)
-                faul_correct_k = CMPFaulty[:k].flatten().sum(dtype=torch.float32)
-                gold_result_list.append(gold_correct_k) 
-                faul_result_list.append(faul_correct_k) 
+                gold_result_list = []
+                faul_result_list = []
+                for k in topk:
+                    gold_correct_k = CMPGolden[:k].flatten().sum(dtype=torch.float32)
+                    faul_correct_k = CMPFaulty[:k].flatten().sum(dtype=torch.float32)
+                    gold_result_list.append(gold_correct_k) 
+                    faul_result_list.append(faul_correct_k) 
 
-            self._num_images+=batch_size
-            self._faul_acc1+=faul_result_list[0]
-            self._faul_acck+=faul_result_list[1]
+                self._num_images+=batch_size
+                self._faul_acc1+=faul_result_list[0]
+                self._faul_acck+=faul_result_list[1]
 
-            self._gold_acc1+=gold_result_list[0]
-            self._gold_acck+=gold_result_list[1]
+                self._gold_acc1+=gold_result_list[0]
+                self._gold_acck+=gold_result_list[1]
 
         self._report_dictionary=self._FI_dictionary
         self._FI_dictionary={}
