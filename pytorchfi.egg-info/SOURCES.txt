@@ -12,7 +12,6 @@ pytorchfi.egg-info/SOURCES.txt
 pytorchfi.egg-info/dependency_links.txt
 pytorchfi.egg-info/requires.txt
 pytorchfi.egg-info/top_level.txt
-test/__init__.py
 test/test_example_client.py
 test/test_get_funcs.py
 test/test_init.py

@@ -88,7 +88,7 @@ def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
     E=0.01              #error margin
     P=0.5               # Perrror
     MSB_inection=31
-    LSB_injection=23
+    LSB_injection=24
     fault_list=[]   
     f_list=pd.DataFrame()             
     if kwargs:                               
@@ -184,7 +184,7 @@ def generate_fault_list_ber(path,pfi_model:FaultInjection, **kwargs):
     return(f_list.values.tolist())
 
 
-class FI_report(object):
+class FI_report_classifier(object):
     def __init__(self,log_pah) -> None:
         self._k=0
         self._c_in=0
@@ -197,7 +197,7 @@ class FI_report(object):
         self._faul_acc1=0
         self._faul_acck=0
         
-        self._golden_dictionary={}
+        self._report_dictionary={}
         self._FI_results_dictionary={}
         self._fault_dictionary={}        
         self.Top1_faulty_code=0
@@ -221,6 +221,12 @@ class FI_report(object):
         self.Gacc5=0
         self.Facc1=0
         self.Facc5=0
+
+        self.GACC1=torch.tensor([0.0])
+        self.GACCk=torch.tensor([0.0])
+        self.FACC1=torch.tensor([0.0])
+        self.FACCk=torch.tensor([0.0])
+
 
         self.Accm_SDC_top1=0
         self.Accm_SDC_top5=0
@@ -273,8 +279,6 @@ class FI_report(object):
                 chpt=json.load(Golden_file)
                 self.check_point=chpt
 
-        self.load_golden_report()
-
         if not os.path.exists(os.path.join(self.log_path,'fsim_report.csv')):
             self._fsim_report=pd.DataFrame(columns=['gold_ACC@1','gold_ACC@k',
                                         'img_Top1_Crit','img_Top1_SDC','img_Top1_Masked',
@@ -286,13 +290,15 @@ class FI_report(object):
         
 
     def update_check_point(self,chpt_file):  
-        self.__Update_counters()    
-        fidx=self.check_point["fault_idx"]
-        Report_name=f"FI_{fidx}_results.json"
-        FI_report_json_file=os.path.join(self.log_path,Report_name)
-        with open(FI_report_json_file,'w') as Golden_file:
-            json.dump(self._FI_results_dictionary,Golden_file)        
-        self._FI_results_dictionary={}
+        self._update_chpt_info()
+        self.update_fault_parse_results()
+        self.reset_counter()
+        # fidx=self.check_point["fault_idx"]
+        # Report_name=f"FI_{fidx}_results.json"
+        # FI_report_json_file=os.path.join(self.log_path,Report_name)
+        # with open(FI_report_json_file,'w') as Golden_file:
+        #     json.dump(self._FI_results_dictionary,Golden_file)        
+        # self._FI_results_dictionary={}
 
         new_row=pd.DataFrame(self._fault_dictionary, index=[0])
         self._fsim_report=pd.concat([self._fsim_report, new_row],ignore_index=True, sort=False)
@@ -302,67 +308,12 @@ class FI_report(object):
         with open(ckpt_path_file,'w') as Golden_file:
             json.dump(self.check_point,Golden_file)
 
-    def __Update_counters(self):    
-        self.Top1_faulty_code=0 # 0: Masked; 1: SDC; 2; Critical
-        self.Topk_faulty_code=0 # 0: Masked; 1: SDC; 2; Critical
-        self.check_point["fault_idx"]+=1 
-        self.check_point["top1"]["images"]["Critical"]+=self.T1_Critical
-        self.check_point["top1"]["images"]["SDC"]+=self.T1_SDC
-        self.check_point["top1"]["images"]["Masked"]+=self.T1_Masked
-        self.check_point["topk"]["images"]["Critical"]+=self.T5_Critical
-        self.check_point["topk"]["images"]["SDC"]+=self.T5_SDC
-        self.check_point["topk"]["images"]["Masked"]+=self.T5_Masked
 
-            # break
-        if(self.T1_Critical!=0):
-            # self.Critical_top1+=1
-            self.check_point["top1"]["fault"]["Critical"]+=1
-            self.Top1_faulty_code=2
-        elif self.T1_SDC !=0:
-            # self.SDC_top1+=1
-            self.check_point["top1"]["fault"]["SDC"]+=1
-            self.Top1_faulty_code=1
-        else:
-            # self.Masked_top1+=1
-            self.check_point["top1"]["fault"]["Masked"]+=1
-            self.Top1_faulty_code=0
-
-        if(self.T5_Critical!=0):
-            # self.Critical_top5+=1
-            self.check_point["topk"]["fault"]["Critical"]+=1
-            self.Topk_faulty_code=2
-        elif self.T5_SDC !=0:
-            # self.SDC_top5+=1
-            self.check_point["topk"]["fault"]["SDC"]+=1
-            self.Topk_faulty_code=1
-        else:
-            # self.Masked_top5+=1  
-            self.check_point["topk"]["fault"]["Masked"]+=1
-            self.Topk_faulty_code=0
-
-        GACC1=self._gold_acc1*100/self._num_images
-        GACCk=self._gold_acck*100/self._num_images
-        FACC1=self._faul_acc1*100/self._num_images
-        FACCk=self._faul_acck*100/self._num_images
-
-
-        self._fault_dictionary['gold_ACC@1'] = GACC1.item()
-        self._fault_dictionary['gold_ACC@k'] = GACCk.item()
-
-        self._fault_dictionary['img_Top1_Crit'] = self.T1_Critical
-        self._fault_dictionary['img_Top1_SDC'] = self.T1_SDC
-        self._fault_dictionary['img_Top1_Masked'] = self.T1_Masked
-        self._fault_dictionary['fault_ACC@1'] = FACC1.item()
-
-        self._fault_dictionary['img_Topk_Crit'] = self.T5_Critical
-        self._fault_dictionary['img_Topk_SDC'] = self.T5_SDC
-        self._fault_dictionary['img_Topk_Masked'] = self.T5_Masked
-        self._fault_dictionary['fault_ACC@k'] = FACCk.item()
-        
-        self._fault_dictionary['Class_Top1'] = self.Top1_faulty_code
-        self._fault_dictionary['Class_Topk'] = self.Topk_faulty_code
-
-
+    def reset_counter(self):
+        self.GACC1=torch.tensor([0.0])
+        self.GACCk=torch.tensor([0.0])
+        self.FACC1=torch.tensor([0.0])
+        self.FACCk=torch.tensor([0.0])
         self.T1_SDC=0
         self.T1_Masked=0
         self.T1_Critical=0
@@ -373,136 +324,202 @@ class FI_report(object):
         self._gold_acck=0
         self._faul_acc1=0
         self._faul_acck=0
-        self._num_images=0    
+        self._num_images=0     
 
-    def create_golden_report(self):
+    def _update_chpt_info(self):    
+        self.Top1_faulty_code=0 # 0: Masked; 1: SDC; 2; Critical; 3=crash
+        self.Topk_faulty_code=0 # 0: Masked; 1: SDC; 2; Critical; 3=crash
+        self.check_point["fault_idx"]+=1 
+        if(self._num_images==0):
+            self.GACC1=torch.tensor([0.0])
+            self.GACCk=torch.tensor([0.0])
+            self.FACC1=torch.tensor([0.0])
+            self.FACCk=torch.tensor([0.0])
+            self.Topk_faulty_code=3
+            self.Top1_faulty_code=3
+        else:
+            self.check_point["top1"]["images"]["Critical"]+=self.T1_Critical
+            self.check_point["top1"]["images"]["SDC"]+=self.T1_SDC
+            self.check_point["top1"]["images"]["Masked"]+=self.T1_Masked
+            self.check_point["topk"]["images"]["Critical"]+=self.T5_Critical
+            self.check_point["topk"]["images"]["SDC"]+=self.T5_SDC
+            self.check_point["topk"]["images"]["Masked"]+=self.T5_Masked
+
+                # break
+            if(self.T1_Critical!=0):
+                # self.Critical_top1+=1
+                self.check_point["top1"]["fault"]["Critical"]+=1
+                self.Top1_faulty_code=2
+            elif self.T1_SDC !=0:
+                # self.SDC_top1+=1
+                self.check_point["top1"]["fault"]["SDC"]+=1
+                self.Top1_faulty_code=1
+            else:
+                # self.Masked_top1+=1
+                self.check_point["top1"]["fault"]["Masked"]+=1
+                self.Top1_faulty_code=0
+
+            if(self.T5_Critical!=0):
+                # self.Critical_top5+=1
+                self.check_point["topk"]["fault"]["Critical"]+=1
+                self.Topk_faulty_code=2
+            elif self.T5_SDC !=0:
+                # self.SDC_top5+=1
+                self.check_point["topk"]["fault"]["SDC"]+=1
+                self.Topk_faulty_code=1
+            else:
+                # self.Masked_top5+=1  
+                self.check_point["topk"]["fault"]["Masked"]+=1
+                self.Topk_faulty_code=0
+        
+            self.GACC1=self._gold_acc1*100/self._num_images
+            self.GACCk=self._gold_acck*100/self._num_images
+            self.FACC1=self._faul_acc1*100/self._num_images
+            self.FACCk=self._faul_acck*100/self._num_images
+
+
+    def update_fault_parse_results(self):
+        self._fault_dictionary['gold_ACC@1'] = self.GACC1.item()
+        self._fault_dictionary['gold_ACC@k'] = self.GACCk.item()
+        self._fault_dictionary['img_Top1_Crit'] = self.T1_Critical
+        self._fault_dictionary['img_Top1_SDC'] = self.T1_SDC
+        self._fault_dictionary['img_Top1_Masked'] = self.T1_Masked
+        self._fault_dictionary['fault_ACC@1'] = self.FACC1.item()
+        self._fault_dictionary['img_Topk_Crit'] = self.T5_Critical
+        self._fault_dictionary['img_Topk_SDC'] = self.T5_SDC
+        self._fault_dictionary['img_Topk_Masked'] = self.T5_Masked
+        self._fault_dictionary['fault_ACC@k'] = self.FACCk.item()
+        self._fault_dictionary['Class_Top1'] = self.Top1_faulty_code
+        self._fault_dictionary['Class_Topk'] = self.Topk_faulty_code
+
+
+    def create_report(self,file_name):
         listdirectories=os.listdir(self.log_path)
-        num=0    
+        num=0 
+        file_name_cmp=f"{file_name}_"   
         for dir in listdirectories:      
-            if "Golden_results_" in dir:            
+            if file_name_cmp in dir:            
                 num+=1
         num+=1
-        new_golden_name=f"Golden_results_{num}.json"
-        os.system(f"mv {os.path.join(self.log_path,'Golden_results.json')} {os.path.join(self.log_path,new_golden_name)}")
-        self._golden_dictionary={}
-        self.load_golden_report()
+        new_golden_name=f"{file_name}_{num}.json"
+        old_report_name=f"{file_name}.json"
+        os.system(f"mv {os.path.join(self.log_path,old_report_name)} {os.path.join(self.log_path,new_golden_name)}")
+        self._report_dictionary=self.load_report(file_name)
+        
 
-    def load_golden_report(self):
-        golden_file_path=os.path.join(self.log_path,'Golden_results.json')
+    def load_report(self,file_name):
+        file_name_json=f"{file_name}.json"
+        golden_file_path=os.path.join(self.log_path,file_name_json)
+        loaded_report={}
         if not os.path.exists(golden_file_path):
             with open(golden_file_path,'w') as Golden_file:
-                json.dump(self._golden_dictionary,Golden_file)
-        else:
-            
+                json.dump(loaded_report,Golden_file)
+        else:            
             with open(golden_file_path,'r') as Golden_file:
-                self._golden_dictionary=json.load(Golden_file)
+                loaded_report=json.load(Golden_file)
+        return(loaded_report)
 
-    def save_golden_report(self):        
-        golden_file_path=os.path.join(self.log_path,'Golden_results.json')
+    def save_report(self,file_name):    
+        file_name_json=f"{file_name}.json"    
+        golden_file_path=os.path.join(self.log_path,file_name_json)
         with open(golden_file_path,'w') as Golden_file:
-            json.dump(self._golden_dictionary,Golden_file)
+            json.dump(self._report_dictionary,Golden_file)
 
-    def update_golden_report(self,index,output,target,topk=(1,)):
+    def update_report(self,index,output,target,topk=(1,)):
         maxk=max(topk)
-        self._golden_dictionary[index]={}
+        self._report_dictionary[index]={}
         pred, clas=output.cpu().topk(maxk,1,True,True)
-        self._golden_dictionary[index]['pred']=pred.tolist()
-        self._golden_dictionary[index]['clas']=clas.tolist()
-        self._golden_dictionary[index]['target']=target.cpu().tolist()
+        self._report_dictionary[index]['pred']=pred.tolist()
+        self._report_dictionary[index]['clas']=clas.tolist()
+        self._report_dictionary[index]['target']=target.cpu().tolist()
 
         
-    def check_FI_report(self,index,output,target,topk=(1,)):        
-        ResTop1=""
-        ResTop5=""
-        self.Golden=self._golden_dictionary[str(index)]
-        FI_results_json={}        
-        G_pred=torch.tensor(self.Golden['pred'],requires_grad=False).t()
-        G_clas=torch.tensor(self.Golden['clas'],requires_grad=False).t()
-        G_target=torch.tensor(self.Golden['target'],requires_grad=False)
-        batch_size = G_target.size(0)
+    def Fault_parser(self,golden_file_report, faulty_file_report, topk=(1,)):
+        self._golden_dictionary=self.load_report(golden_file_report)
+        self._FI_dictionary=self.load_report(faulty_file_report)
 
-        maxk=max(topk)
-        mink=min(topk)
-        pred, clas=output.cpu().topk(maxk,1,True,True)
-        FI_results_json['pred']=pred.tolist()
-        FI_results_json['clas']=clas.tolist()
-        FI_results_json['target']=target.cpu().tolist()
-        
-        FI_pred=pred.clone().detach().t()
-        FI_clas=clas.clone().detach().t()
-        FI_target=target.cpu().clone().detach()
+        for index in self._golden_dictionary:
+            ResTop1=""
+            ResTop5=""
+            self.Golden=self._golden_dictionary[index]
+            self.Faulty=self._FI_dictionary[index]
+                   
+            G_pred=torch.tensor(self.Golden['pred'],requires_grad=False).t()
+            G_clas=torch.tensor(self.Golden['clas'],requires_grad=False).t()
+            G_target=torch.tensor(self.Golden['target'],requires_grad=False)
+            batch_size = G_target.size(0)
 
-        CMPGolden=G_clas.eq(G_target[None])
-        CMPFaulty=FI_clas.eq(FI_target[None]) 
-
-        self.Gacc1=CMPGolden[:mink].sum(dim=0,dtype=torch.float32)
-        self.Facc1=CMPFaulty[:mink].sum(dim=0,dtype=torch.float32)
-        self.Gacc5=CMPGolden[:maxk].sum(dim=0,dtype=torch.float32)
-        self.Facc5=CMPFaulty[:maxk].sum(dim=0,dtype=torch.float32)
-
-        CMPpredGoldFaulty=G_pred.eq(FI_pred).sum(dim=0,dtype=torch.float32)
-        CMPClasGoldFaulty=G_clas.eq(FI_clas).sum(dim=0,dtype=torch.float32)
-        ResTop1=[]
-        ResTop5=[]
-
-        for img in range(batch_size):                
-            if self.Gacc1[img] == self.Facc1[img]:
-                if(CMPpredGoldFaulty[img] == CMPClasGoldFaulty[img]):
-                    self.T1_Masked+=1                
-                    ResTop1.append("Masked")
-                    # print(CMPpredGoldFaulty)
-                    # print(CMPClasGoldFaulty)
-                else:
-                    self.T1_SDC+=1
-                    ResTop1.append("SDC")
-            else:
-                self.T1_Critical+=1
-                ResTop1.append("Critical")
-
-            if self.Gacc5[img] == self.Facc5[img]:
-                if(CMPpredGoldFaulty[img] == CMPClasGoldFaulty[img]):
-                    self.T5_Masked+=1
-                    ResTop5.append("Masked")
-                    # print(CMPpredGoldFaulty)
-                    # print(CMPClasGoldFaulty)
-                else:
-                    self.T5_SDC+=1
-                    ResTop5.append("SDC")
-            else:
-                self.T5_Critical+=1
-                ResTop5.append("Critical")
+            maxk=max(topk)
+            mink=min(topk)
             
-        FI_results_json['ResTop1']=ResTop1
-        FI_results_json['ResTopk']=ResTop5
+            FI_pred=torch.tensor(self.Faulty['pred'],requires_grad=False).t()
+            FI_clas=torch.tensor(self.Faulty['clas'],requires_grad=False).t()
+            FI_target=torch.tensor(self.Faulty['target'],requires_grad=False)
 
-        gold_result_list = []
-        faul_result_list = []
-        for k in topk:
-            gold_correct_k = CMPGolden[:k].flatten().sum(dtype=torch.float32)
-            faul_correct_k = CMPFaulty[:k].flatten().sum(dtype=torch.float32)
-            gold_result_list.append(gold_correct_k) 
-            faul_result_list.append(faul_correct_k) 
+            CMPGolden=G_clas.eq(G_target[None])
+            CMPFaulty=FI_clas.eq(FI_target[None]) 
 
-        self._num_images+=batch_size
-        self._faul_acc1+=faul_result_list[0]
-        self._faul_acck+=faul_result_list[1]
+            self.Gacc1=CMPGolden[:mink].sum(dim=0,dtype=torch.float32)
+            self.Facc1=CMPFaulty[:mink].sum(dim=0,dtype=torch.float32)
+            self.Gacc5=CMPGolden[:maxk].sum(dim=0,dtype=torch.float32)
+            self.Facc5=CMPFaulty[:maxk].sum(dim=0,dtype=torch.float32)
 
-        self._gold_acc1+=gold_result_list[0]
-        self._gold_acck+=gold_result_list[1]
+            CMPpredGoldFaulty=G_pred.eq(FI_pred).sum(dim=0,dtype=torch.float32)
+            CMPClasGoldFaulty=G_clas.eq(FI_clas).sum(dim=0,dtype=torch.float32)
+            ResTop1=[]
+            ResTop5=[]
 
-        self._FI_results_dictionary[index]={}
-        self._FI_results_dictionary[index]=FI_results_json
+            for img in range(batch_size):                
+                if self.Gacc1[img] == self.Facc1[img]:
+                    if(CMPpredGoldFaulty[img] == CMPClasGoldFaulty[img]):
+                        self.T1_Masked+=1                
+                        ResTop1.append("Masked")
+                        # print(CMPpredGoldFaulty)
+                        # print(CMPClasGoldFaulty)
+                    else:
+                        self.T1_SDC+=1
+                        ResTop1.append("SDC")
+                else:
+                    self.T1_Critical+=1
+                    ResTop1.append("Critical")
 
-        return(FI_results_json)
+                if self.Gacc5[img] == self.Facc5[img]:
+                    if(CMPpredGoldFaulty[img] == CMPClasGoldFaulty[img]):
+                        self.T5_Masked+=1
+                        ResTop5.append("Masked")
+                        # print(CMPpredGoldFaulty)
+                        # print(CMPClasGoldFaulty)
+                    else:
+                        self.T5_SDC+=1
+                        ResTop5.append("SDC")
+                else:
+                    self.T5_Critical+=1
+                    ResTop5.append("Critical")
+
+            self._FI_dictionary[index]['ResTop1']=ResTop1 
+            self._FI_dictionary[index]['ResTopk']=ResTop5 
 
 
-    def FI_results(self):
-        return (self.check_point["top1"]["fault"]["Critical"], self.check_point["top1"]["fault"]["SDC"], self.check_point["top1"]["fault"]["Masked"], 
-        self.check_point["topk"]["fault"]["Critical"], self.check_point["topk"]["fault"]["SDC"], self.check_point["topk"]["fault"]["Masked"])
+            gold_result_list = []
+            faul_result_list = []
+            for k in topk:
+                gold_correct_k = CMPGolden[:k].flatten().sum(dtype=torch.float32)
+                faul_correct_k = CMPFaulty[:k].flatten().sum(dtype=torch.float32)
+                gold_result_list.append(gold_correct_k) 
+                faul_result_list.append(faul_correct_k) 
 
-    def FI_results_accm(self):
-        return (self.check_point["top1"]["images"]["Critical"], self.check_point["top1"]["images"]["SDC"], self.check_point["top1"]["images"]["Masked"], 
-        self.check_point["topk"]["images"]["Critical"], self.check_point["topk"]["images"]["SDC"], self.check_point["topk"]["images"]["Masked"])
+            self._num_images+=batch_size
+            self._faul_acc1+=faul_result_list[0]
+            self._faul_acck+=faul_result_list[1]
+
+            self._gold_acc1+=gold_result_list[0]
+            self._gold_acck+=gold_result_list[1]
+
+        self._report_dictionary=self._FI_dictionary
+        self._FI_dictionary={}
+        self._golden_dictionary={}
+        self.save_report(faulty_file_report)
+            #return(FI_results_json)
 
 
 class FI_framework(object):
@@ -514,23 +531,16 @@ class FI_framework(object):
         self._kC=[]
         self._kH=[]
         self._kW=[]                
-        self._inj_mask=[]     
-        self._fault_list=[]    
+        self._inj_mask=[]         
         self._bf_inj_w_mask=0
         self.faultfreedata=0
         self.faultydata=0
         self.log_msg=''
-        self.FI_report=FI_report(log_path)
         self.log_path=log_path
         self.log_file=os.path.join(log_path,'FSIM_log.log')
         self.pfi_model=None
-        self.faulty_model=None
-        try:
-            os.mkdir(self.log_path)           
-        except:
-            print(f"The log path: {self.log_path} // already exist...")           
-
-
+        self.injected_fault={}
+        
     def float_to_hex(self,f):
         h=hex(struct.unpack('<I', struct.pack('<f', f))[0])
         return h[2:len(h)]
@@ -540,12 +550,6 @@ class FI_framework(object):
 
     def int_to_float(self,h):
         return float(struct.unpack(">f",struct.pack(">I",h))[0])
-
-    def log_faults(self,chpt_file):
-        self.FI_report.update_check_point(chpt_file)                 
-        with open(self.log_file,'a+') as logfile:
-            self.log_msg
-            logfile.write(self.log_msg+'\n')
 
     def create_fault_injection_model(self,device,model,batch_size=1,input_shape=[3,224,224],layer_types=[torch.nn.Conv2d]): 
         if device.type.startswith('cuda'): 
@@ -558,26 +562,7 @@ class FI_framework(object):
                     layer_types=layer_types,
                     use_cuda=use_cuda,
                     )
-
-    def generate_fault_list(self, **kwargs):        
-        if kwargs:
-            if (kwargs.get('flist_mode')=='sbfm'):
-                self._fault_list=generate_fault_list_sbfm(self.log_path,self.pfi_model,**kwargs)
-            elif(kwargs.get('flist_mode')=='ber'):
-                self._fault_list=generate_fault_list_ber(self.log_path,self.pfi_model,**kwargs)
-            else:
-                raise ValueError("The fault list can't be generated in this configuration")
-        else:
-            raise ValueError("The input arguments are wrong, please be sure you selected at least the fault list name in csv format")
         
-    def iter_fault_list(self):
-        for k in range(int(self.FI_report.check_point["fault_idx"]),len(self._fault_list)):
-            fault=self._fault_list[k]
-            yield fault            
-
-    def Model_inject_fault(self,input):
-        return(self.faulty_model(input))
-       
     def bit_flip_weight_inj(self, layer, k, c_in, kH, kW, inj_mask):
         self._kK=(k)
         self._kC=(c_in)
@@ -594,11 +579,8 @@ class FI_framework(object):
         orig_data=data[location].item()
         data_32bit=int(self.float_to_hex(data[location].item()),16)
 
-        #print(_bf_inj_w_mask)
-
         corrupt_32bit=data_32bit ^ int(injmask)
         corrupt_val=self.int_to_float(corrupt_32bit)
-        #print(data_32bit,_bf_inj_w_mask,corrupt_32bit, orig_data, corrupt_val)
         self.log_msg=f"F_descriptor: Layer:{self._layer}, (K, C, H, W):{location}, BitMask:{injmask}, Ffree_Weight:{data_32bit}, Faulty_weight:{corrupt_32bit}"
         logger.info(self.log_msg)
         fsim_dict={'Layer':self._layer[0], 
@@ -610,7 +592,7 @@ class FI_framework(object):
                     'Ffree_Weight':data_32bit,
                     'Faulty_weight':corrupt_32bit,
                     'Abs_error':(orig_data-corrupt_val)}
-        self.FI_report.set_fault_report(fsim_dict)     
+        self.injected_fault=fsim_dict
         return corrupt_val
     
 
@@ -689,7 +671,7 @@ class FI_framework(object):
         fsim_dict['N_BER']=BER
         fsim_dict['T_Bits']=Tot_N_bits
         fsim_dict['BER']=self._BER
-        self.FI_report.set_fault_report(fsim_dict)
+        self.injected_fault=fsim_dict
 
         self.faulty_model=self.pfi_model.declare_weight_fault_injection(
             BitFlip=self._BER_weight, layer_num=self._layer, k=self._kK, dim1=self._kC, dim2=self._kH, dim3=self._kW, bitmask=self._inj_mask
@@ -723,3 +705,44 @@ class DatasetSampling(object):
 
     def __len__(self):
         return len(self.indices)
+    
+
+class FI_manager(object):
+    def __init__(self,log_path) -> None:
+        self.faulty_model=None
+        self.pfi_model=None
+        self._fault_list=[]
+        self.log_msg=''
+        self.log_path=log_path
+        self.log_file=os.path.join(log_path,'FSIM_log.log')
+        self.FI_report=FI_report_classifier(log_path)
+        self.FI_framework=FI_framework(log_path)
+        try:
+            os.mkdir(self.log_path)           
+        except:
+            print(f"The log path: {self.log_path} // already exist...")   
+
+
+    def generate_fault_list(self, **kwargs): 
+        self.pfi_model=self.FI_framework.pfi_model       
+        if kwargs:
+            if (kwargs.get('flist_mode')=='sbfm'):
+                self._fault_list=generate_fault_list_sbfm(self.log_path,self.pfi_model,**kwargs)
+            elif(kwargs.get('flist_mode')=='ber'):
+                self._fault_list=generate_fault_list_ber(self.log_path,self.pfi_model,**kwargs)
+            else:
+                raise ValueError("The fault list can't be generated in this configuration")
+        else:
+            raise ValueError("The input arguments are wrong, please be sure you selected at least the fault list name in csv format")
+        
+    def iter_fault_list(self):
+        for k in range(int(self.FI_report.check_point["fault_idx"]),len(self._fault_list)):
+            fault=self._fault_list[k]
+            yield (fault, k)    
+
+    def update_reports(self,chpt_file):
+        self.FI_report.set_fault_report(self.FI_framework.injected_fault)
+        self.FI_report.update_check_point(chpt_file)
+
+    def load_check_point(self,chpt_file):
+        self.FI_report.load_check_point(chpt_file)
