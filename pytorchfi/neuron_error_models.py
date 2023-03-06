@@ -2,6 +2,7 @@
 
 import logging
 import random
+import struct
 
 import torch
 
@@ -10,6 +11,8 @@ from pytorchfi.util import random_value
 
 # Helper Functions
 
+logger=logging.getLogger("pytorchfi") 
+logger.setLevel(logging.DEBUG) 
 
 def random_batch_element(pfi: core.FaultInjection):
     return random.randint(0, pfi.batch_size - 1)
@@ -153,10 +156,10 @@ def random_inj_per_layer_batched(
 
 
 class single_bit_flip_func(core.FaultInjection):
-    def __init__(self, model, batch_size, input_shape=None, **kwargs):
+    def __init__(self, model, batch_size, input_shape=None, layer_types=None, **kwargs):
         if input_shape is None:
             input_shape = [3, 224, 224]
-        super().__init__(model, batch_size, input_shape=input_shape, **kwargs)
+        super().__init__(model, batch_size, input_shape=input_shape, layer_types=layer_types, **kwargs)
         logging.basicConfig(format="%(asctime)-15s %(clientip)s %(user)-8s %(message)s")
 
         self.bits = kwargs.get("bits", 8)
@@ -170,6 +173,42 @@ class single_bit_flip_func(core.FaultInjection):
 
     def get_conv_max(self, layer):
         return self.layer_ranges[layer]
+    
+    @staticmethod
+    def _float_to_hex(f):
+        h=hex(struct.unpack('<I', struct.pack('<f', f))[0])
+        return h[2:len(h)]
+
+    @staticmethod
+    def _hex_to_float(h):
+        return float(struct.unpack(">f",struct.pack(">I",int(h,16)))[0])
+
+    @staticmethod
+    def _int_to_float(h):
+        return float(struct.unpack(">f",struct.pack(">I",h))[0])
+    
+    @staticmethod
+    def _max_num_bits(data):
+        dtype=data.dtype
+        if (dtype==torch.float32) or (dtype==torch.int32) or (dtype==torch.int):
+            return(32)
+        elif (dtype==torch.half) or (dtype==torch.float16) or (dtype==torch.int16) or (dtype==torch.short):
+            return(16)
+        elif (dtype==torch.int8) or (dtype==torch.uint8):
+            return(8)
+        else:
+            return(32)
+        
+
+    
+    def _bit_flip_value(self,orig_value, bit_pos):
+        save_type = orig_value.dtype
+        orig_data=float(orig_value)
+        injmask=2**bit_pos
+        data_32bit=int(self._float_to_hex(orig_data),16)
+        corrupt_32bit=data_32bit ^ int(injmask)
+        corrupt_val=self._int_to_float(corrupt_32bit)
+        return torch.tensor(corrupt_val, dtype=save_type)
 
     @staticmethod
     def _twos_comp(val, bits):
@@ -184,23 +223,23 @@ class single_bit_flip_func(core.FaultInjection):
         # quantum value
         save_type = orig_value.dtype
         total_bits = self.bits
-        logging.info(f"Original Value: {orig_value}")
+        logger.info(f"Original Value: {orig_value}")
 
         quantum = int((orig_value / max_value) * ((2.0 ** (total_bits - 1))))
         twos_comple = self._twos_comp_shifted(quantum, total_bits)  # signed
-        logging.info(f"Quantum: {quantum}")
-        logging.info(f"Twos Couple: {twos_comple}")
+        logger.info(f"Quantum: {quantum}")
+        logger.info(f"Twos Couple: {twos_comple}")
 
         # binary representation
         bits = bin(twos_comple)[2:]
-        logging.info(f"Bits: {bits}")
+        logger.info(f"Bits: {bits}")
 
         # sign extend 0's
         temp = "0" * (total_bits - len(bits))
         bits = temp + bits
         if len(bits) != total_bits:
             raise AssertionError
-        logging.info(f"Sign extend bits {bits}")
+        logger.info(f"Sign extend bits {bits}")
 
         # flip a bit
         # use MSB -> LSB indexing
@@ -214,30 +253,30 @@ class single_bit_flip_func(core.FaultInjection):
         else:
             bits_new[bit_loc] = "0"
         bits_str_new = "".join(bits_new)
-        logging.info(f"New bits: {bits_str_new}")
+        logger.info(f"New bits: {bits_str_new}")
 
         # GPU contention causes a weird bug...
         if not bits_str_new.isdigit():
-            logging.info("Error: Not all the bits are digits (0/1)")
+            logger.info("Error: Not all the bits are digits (0/1)")
 
         # convert to quantum
         if not bits_str_new.isdigit():
             raise AssertionError
         new_quantum = int(bits_str_new, 2)
         out = self._twos_comp(new_quantum, total_bits)
-        logging.info(f"Out: {out}")
+        logger.info(f"Out: {out}")
 
         # get FP equivalent from quantum
         new_value = out * ((2.0 ** (-1 * (total_bits - 1))) * max_value)
-        logging.info(f"New Value: {new_value}")
-
+        logger.info(f"New Value: {new_value}")
+        
         return torch.tensor(new_value, dtype=save_type)
 
     def single_bit_flip_signed_across_batch(self, module, input_val, output):
         corrupt_conv_set = self.corrupt_layer
         range_max = self.get_conv_max(self.current_layer)
-        logging.info(f"Current layer: {self.current_layer}")
-        logging.info(f"Range_max: {range_max}")
+        logger.info(f"Current layer: {self.current_layer}")
+        logger.info(f"Range_max: {range_max}")
 
         if type(corrupt_conv_set) is list:
             inj_list = list(
@@ -253,7 +292,7 @@ class single_bit_flip_func(core.FaultInjection):
                 ][self.corrupt_dim[2][i]]
 
                 rand_bit = random.randint(0, self.bits - 1)
-                logging.info(f"Random Bit: {rand_bit}")
+                logger.info(f"Random Bit: {rand_bit}")
                 new_value = self._flip_bit_signed(prev_value, range_max, rand_bit)
 
                 output[self.corrupt_batch[i]][self.corrupt_dim[0][i]][
@@ -267,8 +306,55 @@ class single_bit_flip_func(core.FaultInjection):
                 ][self.corrupt_dim[2]]
 
                 rand_bit = random.randint(0, self.bits - 1)
-                logging.info(f"Random Bit: {rand_bit}")
+                logger.info(f"Random Bit: {rand_bit}")
                 new_value = self._flip_bit_signed(prev_value, range_max, rand_bit)
+
+                output[self.corrupt_batch][self.corrupt_dim[0]][self.corrupt_dim[1]][
+                    self.corrupt_dim[2]
+                ] = new_value
+
+        self.update_layer()
+        if self.current_layer >= len(self.output_size):
+            self.reset_current_layer()
+
+    def single_bit_flip_across_batch(self, module, input_val, output):
+        corrupt_conv_set = self.corrupt_layer
+        # range_max = self.get_conv_max(self.current_layer)
+        logger.info(f"Current layer: {self.current_layer}")
+        #logger.info(f"Range_max: {range_max}")
+        
+        if type(corrupt_conv_set) is list:
+            inj_list = list(
+                filter(
+                    lambda x: corrupt_conv_set[x] == self.current_layer,
+                    range(len(corrupt_conv_set)),
+                )
+            )
+            for i in inj_list:
+                #print(self.output_size[self.current_layer])
+                if(i<output.shape[0]):
+                    self.assert_injection_bounds(index=i)
+                    prev_value = output[self.corrupt_batch[i]][self.corrupt_dim[0][i]][
+                        self.corrupt_dim[1][i]
+                    ][self.corrupt_dim[2][i]]
+
+                    rand_bit = random.randint(0, self._max_num_bits(prev_value) - 1)
+                    logger.info(f"Random Bit: {rand_bit}")
+                    new_value = self._bit_flip_value(prev_value, rand_bit)
+
+                    output[self.corrupt_batch[i]][self.corrupt_dim[0][i]][
+                        self.corrupt_dim[1][i]
+                    ][self.corrupt_dim[2][i]] = new_value
+
+        else:
+            if self.current_layer == corrupt_conv_set:
+                prev_value = output[self.corrupt_batch][self.corrupt_dim[0]][
+                    self.corrupt_dim[1]
+                ][self.corrupt_dim[2]]
+
+                rand_bit = random.randint(0, self._max_num_bits(prev_value) - 1)
+                logger.info(f"Random Bit: {rand_bit}")
+                new_value = self._bit_flip_value(prev_value, rand_bit)
 
                 output[self.corrupt_batch][self.corrupt_dim[0]][self.corrupt_dim[1]][
                     self.corrupt_dim[2]
