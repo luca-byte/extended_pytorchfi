@@ -5,6 +5,8 @@ import json
 import sys, os
 import pandas as pd
 
+import matplotlib.pyplot as plt
+
 import sys
 # caution: path[0] is reserved for script path (or '' in REPL)
 #sys.path.insert(1, 'pytorchfi')
@@ -83,13 +85,186 @@ logger.setLevel(logging.DEBUG)
     #     self.fault_dictionary[self._layer][self._kK][self._kC][self._kH][self._kW][self._inj_mask][key]=val
 
         # k, c, H, W
+def float_to_bin(f):
+    h=hex(struct.unpack('<I', struct.pack('<f', f))[0])
+    weight_bin_clean="{:032b}".format(int(h[2:len(h)],16))
+    return(weight_bin_clean)
 
-def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
+def float_flip(f,pos,mode="01"):
+    h=hex(struct.unpack('<I', struct.pack('<f', f))[0])
+    d=int(h[2:len(h)],16)
+    if(mode=="01"):
+        d=d|(2**pos)
+    elif(mode=="10"):
+        d=d&((2**pos)^(int('FFFFFFFF',16)))
+    else:
+        d=d
+    return (float(struct.unpack(">f",struct.pack(">I",d))[0]))
+
+def weight_distribution(pfi_model:FaultInjection, **kwargs):    
+    if kwargs:
+        layer_num=kwargs.get('layer')
+        path=kwargs.get('path')
+        
+        
+        if(os.path.exists(os.path.join(path,"weights_distribution_DNN.csv"))):
+            D_df = pd.read_csv(os.path.join(path,"weights_distribution_DNN.csv"))
+            p=D_df['p'].values.tolist()
+            return(p)
+        
+        
+        layer_idx=0
+
+        weight_distribution_dict={}
+        weight_distribution_dict[0]=[0]*32
+        weight_distribution_dict[1]=[0]*32
+
+        weights=[]
+
+        pfi_model.print_pytorchfi_layer_summary()
+
+        for layer in pfi_model.original_model.modules():
+            if isinstance(layer, tuple(pfi_model._inj_layer_types)):
+                if(layer_num==layer_num):
+                    weight_dimention=pfi_model.get_weights_dim(layer_idx)
+                    weight_shape=list(pfi_model.get_weights_size(layer_idx))
+                    print(layer_idx,weight_shape)
+                    for dim1 in range(weight_shape[0]):
+                        for dim2 in range(weight_shape[1]):
+                            if(weight_dimention>2):
+                                for dim3 in range(weight_shape[2]):
+                                    for dim4 in range(weight_shape[3]):
+                                        weight_idx = tuple(
+                                            [
+                                                dim1,
+                                                dim2,
+                                                dim3,
+                                                dim4,
+                                            ]
+                                        )
+                                        weight_value = layer.weight[weight_idx].item()
+                                        weights.append(weight_value)                                        
+                                        weight_bin_clean=float_to_bin(weight_value)
+                                        for bitidx in range(0,32):
+                                            if(int(weight_bin_clean[bitidx]) not in weight_distribution_dict):
+                                                weight_distribution_dict[int(weight_bin_clean[bitidx])][bitidx]=1
+                                            else:
+                                                weight_distribution_dict[int(weight_bin_clean[bitidx])][bitidx]+=1
+                                        
+                            else:
+                                weight_idx = tuple(
+                                            [
+                                                dim1,
+                                                dim2
+                                            ]
+                                        )
+                                weight_value = layer.weight[weight_idx].item()
+                                weights.append(weight_value)                                        
+                                weight_bin_clean=float_to_bin(weight_value)
+                                for bitidx in range(0,32):
+                                    if(int(weight_bin_clean[bitidx]) not in weight_distribution_dict):
+                                        weight_distribution_dict[int(weight_bin_clean[bitidx])][bitidx]=1
+                                    else:
+                                        weight_distribution_dict[int(weight_bin_clean[bitidx])][bitidx]+=1                                                 
+                layer_idx+=1   
+    zeros=[0]*32
+    ones=[0]*32
+    for i in range(32):
+        zeros[i]=(weight_distribution_dict[0][31-i])
+        ones[i]=(weight_distribution_dict[1][31-i])
+    
+    weigth_hist_df=pd.DataFrame({"weights":weights})
+
+    D01avg=[0]*32
+    D01max=[0]*32
+    D01min=[0]*32
+    D10avg=[0]*32
+    D10max=[0]*32
+    D10min=[0]*32
+
+    Davg_bit=[0]*32
+
+    for bit in range(32):
+        # weigth_hist_df[f"valid_bits0_{bit}"]=(weigth_hist_df["weights"].apply(lambda x: int(float_to_bin(x),2)&2**bit))
+        # df_bit_zero=weigth_hist_df.loc[(weigth_hist_df[f"valid_bits0_{bit}"]==0)]
+        weigth_hist_df[f"bit{bit}_0_1"]=weigth_hist_df["weights"].apply(float_flip,pos=bit,mode="01") 
+        tmpdf=pd.DataFrame()
+        tmpdf["diff"]=abs(weigth_hist_df[f"bit{bit}_0_1"]-weigth_hist_df["weights"])
+        print(tmpdf["diff"].mean())
+        D01max[bit]=tmpdf["diff"].max() if not pd.isna(tmpdf["diff"].max()) else 0
+        D01avg[bit]=tmpdf["diff"].mean() if not pd.isna(tmpdf["diff"].mean()) else 0
+        D01min[bit]=tmpdf["diff"].min() if not pd.isna(tmpdf["diff"].min()) else 0     
+
+        # weigth_hist_df[f"valid_bits1_{bit}"]=(weigth_hist_df["weights"].apply(lambda x: int(float_to_bin(x),2)&2**bit))
+        # df_bit_one=weigth_hist_df.loc[(weigth_hist_df[f"valid_bits1_{bit}"]!=0)]
+        weigth_hist_df[f"bit{bit}_1_0"]=weigth_hist_df["weights"].apply(float_flip,pos=bit,mode="10") 
+        tmpdf=pd.DataFrame()
+        tmpdf["diff"]=abs(weigth_hist_df[f"bit{bit}_1_0"]-weigth_hist_df["weights"])
+
+        D10max[bit]=tmpdf["diff"].max() if not pd.isna(tmpdf["diff"].max()) else 0
+        D10avg[bit]=tmpdf["diff"].mean() if not pd.isna(tmpdf["diff"].mean()) else 0
+        D10min[bit]=tmpdf["diff"].min() if not pd.isna(tmpdf["diff"].min()) else 0
+
+        Davg_bit[bit]=D01avg[bit]*zeros[bit]+D10avg[bit]*ones[bit]
+
+    #weigth_hist_df.to_csv(f"{path}/D_avg.csv")
+    Davg_bit[30]=0
+
+    D_avg_max=max(Davg_bit)
+    D_avg_min=min(Davg_bit)
+
+    p=[0]*32
+    a=0
+    b=0.5
+    for bit in range(32):
+        p[bit]=a+(Davg_bit[bit]-D_avg_min)*(b-a)/(D_avg_max-D_avg_min)
+
+    p[30]=0.5
+    fig,ax = plt.subplots()
+    fig.set_size_inches(12,5)
+    ax=plt.bar(x=[x for x in range(32)],height=p)
+    plt.yscale('log')
+    fig.savefig(f"{path}/p_{layer_num}.jpg")
+
+
+    index=[f"bit{i}" for i in range(32)]
+    df=pd.DataFrame({"zeros":zeros,"ones":ones,"bits":index})
+    D_df=pd.DataFrame({"D01max":D01max,"D01avg":D01avg,"D01min":D01min,
+                       "D10max":D10max,"D10avg":D10avg,"D10min":D10min,
+                       "zeros":zeros,"ones":ones,"bits":index,
+                       "p": p, "Davg_bit":Davg_bit, "bits":index})
+    
+    D_df.to_csv(os.path.join(path,"weights_distribution_DNN.csv"))
+    
+    print(f"max_weight_val = {max(weights)}")
+    print(f"min_weight_val = {min(weights)}")
+
+    fig,ax=plt.subplots()
+    #ax=df.plot.bar(x="bits",rot=0)
+    ax=weigth_hist_df.hist(ax=ax, column="weights",bins=50)
+    plt.yscale('log')
+    fig.savefig(f"{path}/weights_distribution_layer_{layer_num}.jpg")
+
+    maxval=(weigth_hist_df["weights"].abs()).max()
+    minval=(weigth_hist_df["weights"].abs()).min()
+
+    #plt.rcParams["figure.figsize"] = [12,5]
+    fig,ax=plt.subplots()
+    fig.set_size_inches(12,5)
+    fig.text(0.2,0.95,f"max_weight_val = {maxval}; bin = {float_to_bin(maxval)}")
+    fig.text(0.2,0.9, f"min_weight_val = {minval}; bin = {float_to_bin(minval)}")
+    ax=df.plot.bar(x="bits",rot=0,ax=ax)
+    #ax.set_yscale('log')
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
+    fig.savefig(f"{path}/weights_bit_distribution_layer_{layer_num}.jpg")    
+    return(p)
+
+def generate_fault_list_sbfm_old(path,pfi_model:FaultInjection, **kwargs):
     T=1.64485362695147  #confidence level
     E=0.01              #error margin
     P=0.5               # Perrror
     MSB_inection=31
-    LSB_injection=24
+    LSB_injection=19
     fault_list=[]   
     f_list=pd.DataFrame()             
     if kwargs:                               
@@ -133,7 +308,7 @@ def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
                     c=random.randint(0,weight_shape[1]-1)
                 h=random.randint(0,weight_shape[2]-1)
                 w=random.randint(0,weight_shape[3]-1)
-                mask=2**(random.randint(19,31))                
+                mask=2**(random.randint(LSB_injection,MSB_inection))                
                 fault=[layr,k,c,h,w,mask]
                 if fault not in fault_list :
                     fault_list.append(fault)
@@ -146,6 +321,59 @@ def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
             f_list = pd.read_csv(os.path.join(path,fault_list_file),index_col=[0]) 
     return(f_list.values.tolist())
 
+
+def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
+    T=2.576  #confidence level
+    E=0.01              #error margin
+    #P=0.5               # Perrror
+    MSB_inection=31
+    LSB_injection=19
+    fault_list=[]   
+    f_list=pd.DataFrame()             
+    if kwargs:                               
+        fault_list_file=kwargs.get('f_list_file')
+        if not os.path.exists(os.path.join(path,fault_list_file)):                  
+            f_list=pd.DataFrame(columns=['layer','kernel','channel','row','col','bitmask'])            
+            layer_param=kwargs.get('layer')
+            kK_param=kwargs.get('kernel')
+            kC_param=kwargs.get('channel')
+            pfi_model.print_pytorchfi_layer_summary()            
+            print(pfi_model.get_total_layers())
+            if layer_param!= None:
+                layr=layer_param
+            else:
+                layr=random.randint(0,pfi_model.get_total_layers()-1)
+            weight_shape=list(pfi_model.get_weights_size(layr))
+            
+            # P = kwargs.get('p')
+            (P) = weight_distribution(pfi_model=pfi_model,layer=layr,path=path) 
+            
+            N=1
+            for num_dim in range(pfi_model.get_weights_dim(layr)):
+                N*=weight_shape[num_dim]
+            print(N)
+
+            for bitdx in range(32):
+                n=int(N/(1+(E**2)*(N-1)/((T**2)*P[bitdx]*(1-P[bitdx]))))
+                print(n,N)
+                i=0
+                while i<n:
+                    k=random.randint(0,weight_shape[0]-1)                
+                    c=random.randint(0,weight_shape[1]-1)
+                    h=random.randint(0,weight_shape[2]-1)
+                    w=random.randint(0,weight_shape[3]-1)
+                    mask=2**(bitdx)                
+                    fault=[layr,k,c,h,w,mask]
+                    if fault not in fault_list :
+                        fault_list.append(fault)
+                        fault_dict={'layer':layr,'kernel':k,'channel':c,'row':h,'col':w,'bitmask':mask}
+                        new_row=pd.DataFrame(fault_dict, index=[0])
+                        f_list=pd.concat([f_list, new_row],ignore_index=True, sort=False)                                                        
+                        i+=1
+            f_list.to_csv(os.path.join(path,fault_list_file),sep=',')
+        else:
+            f_list = pd.read_csv(os.path.join(path,fault_list_file),index_col=[0]) 
+    return(f_list.values.tolist())
 
 def generate_fault_list_ber(path,pfi_model:FaultInjection, **kwargs):
     fault_list=[]   
@@ -785,7 +1013,7 @@ class FI_manager(object):
         self._golden_file_name=""
         self._faulty_file_name=""
         try:
-            os.mkdir(self.log_path)           
+            os.makedirs(self.log_path)           
         except:
             print(f"The log path: {self.log_path} // already exist...")   
 
