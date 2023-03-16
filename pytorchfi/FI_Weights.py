@@ -4,6 +4,7 @@ import logging
 import json
 import sys, os
 import pandas as pd
+import math
 
 import matplotlib.pyplot as plt
 
@@ -125,7 +126,7 @@ def weight_distribution(pfi_model:FaultInjection, **kwargs):
 
         for layer in pfi_model.original_model.modules():
             if isinstance(layer, tuple(pfi_model._inj_layer_types)):
-                if(layer_num==layer_num):
+                if(layer_idx==layer_num):
                     weight_dimention=pfi_model.get_weights_dim(layer_idx)
                     weight_shape=list(pfi_model.get_weights_size(layer_idx))
                     print(layer_idx,weight_shape)
@@ -189,7 +190,7 @@ def weight_distribution(pfi_model:FaultInjection, **kwargs):
         # df_bit_zero=weigth_hist_df.loc[(weigth_hist_df[f"valid_bits0_{bit}"]==0)]
         weigth_hist_df[f"bit{bit}_0_1"]=weigth_hist_df["weights"].apply(float_flip,pos=bit,mode="01") 
         tmpdf=pd.DataFrame()
-        tmpdf["diff"]=abs(weigth_hist_df[f"bit{bit}_0_1"]-weigth_hist_df["weights"])
+        tmpdf["diff"]=(weigth_hist_df[f"bit{bit}_0_1"]-weigth_hist_df["weights"])
         print(tmpdf["diff"].mean())
         D01max[bit]=tmpdf["diff"].max() if not pd.isna(tmpdf["diff"].max()) else 0
         D01avg[bit]=tmpdf["diff"].mean() if not pd.isna(tmpdf["diff"].mean()) else 0
@@ -199,7 +200,7 @@ def weight_distribution(pfi_model:FaultInjection, **kwargs):
         # df_bit_one=weigth_hist_df.loc[(weigth_hist_df[f"valid_bits1_{bit}"]!=0)]
         weigth_hist_df[f"bit{bit}_1_0"]=weigth_hist_df["weights"].apply(float_flip,pos=bit,mode="10") 
         tmpdf=pd.DataFrame()
-        tmpdf["diff"]=abs(weigth_hist_df[f"bit{bit}_1_0"]-weigth_hist_df["weights"])
+        tmpdf["diff"]=(weigth_hist_df[f"bit{bit}_1_0"]-weigth_hist_df["weights"])
 
         D10max[bit]=tmpdf["diff"].max() if not pd.isna(tmpdf["diff"].max()) else 0
         D10avg[bit]=tmpdf["diff"].mean() if not pd.isna(tmpdf["diff"].mean()) else 0
@@ -259,12 +260,12 @@ def weight_distribution(pfi_model:FaultInjection, **kwargs):
     fig.savefig(f"{path}/weights_bit_distribution_layer_{layer_num}.jpg")    
     return(p)
 
-def generate_fault_list_sbfm_old(path,pfi_model:FaultInjection, **kwargs):
+def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
     T=1.64485362695147  #confidence level
     E=0.01              #error margin
     P=0.5               # Perrror
     MSB_inection=31
-    LSB_injection=19
+    LSB_injection=20
     fault_list=[]   
     f_list=pd.DataFrame()             
     if kwargs:                               
@@ -319,10 +320,10 @@ def generate_fault_list_sbfm_old(path,pfi_model:FaultInjection, **kwargs):
             f_list.to_csv(os.path.join(path,fault_list_file),sep=',')
         else:
             f_list = pd.read_csv(os.path.join(path,fault_list_file),index_col=[0]) 
-    return(f_list.values.tolist())
+    return(f_list)
 
 
-def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
+def generate_fault_list_sbfm_fails(path,pfi_model:FaultInjection, **kwargs):
     T=2.576  #confidence level
     E=0.01              #error margin
     #P=0.5               # Perrror
@@ -346,8 +347,41 @@ def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
             weight_shape=list(pfi_model.get_weights_size(layr))
             
             # P = kwargs.get('p')
-            (P) = weight_distribution(pfi_model=pfi_model,layer=layr,path=path) 
+            # (P) = weight_distribution(pfi_model=pfi_model,layer=layr,path=path) 
             
+            P=[0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.000001,
+               0.00001,
+               0.0005,
+               0.0005,
+               0.0005,
+               0.005,
+               0.005,
+               0.05,
+               0.05,
+               0.05,
+               0.01,
+               0.01,
+               0.01,
+               0.5,
+               0.05]
+
             N=1
             for num_dim in range(pfi_model.get_weights_dim(layr)):
                 N*=weight_shape[num_dim]
@@ -373,7 +407,53 @@ def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
             f_list.to_csv(os.path.join(path,fault_list_file),sep=',')
         else:
             f_list = pd.read_csv(os.path.join(path,fault_list_file),index_col=[0]) 
-    return(f_list.values.tolist())
+    return(f_list)
+
+
+def generate_fault_neurons_tailing(path,pfi_model:FaultInjection, **kwargs):
+    fault_list=[]   
+    fault_dict={}
+    f_list=pd.DataFrame()             
+    if kwargs:                               
+        fault_list_file=kwargs.get('f_list_file')
+        if not os.path.exists(os.path.join(path,fault_list_file)):                  
+            # f_list=pd.DataFrame(columns=['layer','kernel','channel','height','width','bitmask'])     
+            Num_trials=kwargs.get('trials') 
+            tail_bloc_y=kwargs.get('size_tail_y') 
+            tail_bloc_x=kwargs.get('size_tail_x') 
+
+            layer=kwargs.get('layers')
+            pfi_model.print_pytorchfi_layer_summary()            
+            print(pfi_model.get_total_layers())
+
+            # fault_dict['ber']=kwargs.get('BER')
+            fault_dict['layer_start']=layer[0]
+            if len(layer)>1:
+                fault_dict['layer_stop']=layer[1]
+            else:
+                fault_dict['layer_stop']=layer[0]
+
+            fault_dict['block_fault_rate']=kwargs.get('block_fault_rate')
+            fault_dict['neuron_fault_rate']=kwargs.get('neuron_fault_rate')
+
+            fault_dict['size_tail_y']=tail_bloc_y
+            fault_dict['size_tail_x']=tail_bloc_x
+
+            for bit_pos_fault in range(5,32):
+                for _ in (range(Num_trials)):  
+                    fault_dict['bit_faulty_pos']=bit_pos_fault                                                                      
+                    new_row=pd.DataFrame(fault_dict, index=[0])
+                    f_list=pd.concat([f_list, new_row],ignore_index=True, sort=False)                                                        
+                    f_list.to_csv(os.path.join(path,fault_list_file),sep=',')
+        else:
+            f_list = pd.read_csv(os.path.join(path,fault_list_file),index_col=[0]) 
+    return(f_list)
+
+
+
+    
+
+
 
 def generate_fault_list_ber(path,pfi_model:FaultInjection, **kwargs):
     fault_list=[]   
@@ -445,6 +525,79 @@ def generate_error_list_neurons(pfi_model:FaultInjection,layer=-1,channel=-1,row
         dim3_rand = None
 
     return (layer, dim1_rand, dim2_rand, dim3_rand)
+
+
+def loc_neuron(layer=-1,dim=1,shape=[],BlockID_y=1,BlockID_x=1,tail_bloc_y=1,tail_bloc_x=1,):
+    dy=random.randint(0,tail_bloc_y-1)
+    dx=random.randint(0,tail_bloc_x-1)
+    if dim>3:
+        dim1_rand=int((BlockID_y*tail_bloc_y+dy)/tail_bloc_y)
+        dim2_rand=int((BlockID_x*tail_bloc_x+dx)/shape[2])
+        dim3_rand=int((BlockID_x*tail_bloc_x+dx)%shape[2])
+
+        if(dim1_rand>=shape[1]):
+            dim1_rand=shape[1]-1
+
+        if(dim2_rand>=shape[2]):
+            dim2_rand=shape[2]-1
+
+        if(dim3_rand>=shape[3]):
+            dim3_rand=shape[3]-1
+
+    else:
+        dim2_rand=None
+        dim3_rand=None
+    return(layer, dim1_rand, dim2_rand, dim3_rand)
+
+
+def generate_error_list_neurons_tails(pfi_model:FaultInjection,layer=-1,block_error_rate=1,neuron_fault_rate=0.001,tail_bloc_y=32,tail_bloc_x=32):
+    if layer == -1:
+        layer = random.randint(0, pfi_model.get_total_layers() - 1)
+
+    dim = pfi_model.get_layer_dim(layer)
+    shape = pfi_model.get_layer_shape(layer)
+
+    GEMM_y=shape[1]
+    if(dim>3):
+        GEMM_x=shape[2]*shape[3]
+    else:
+        GEMM_x=1
+
+    max_tail_y= int(GEMM_y/tail_bloc_y)
+    max_tail_x= int(GEMM_x/tail_bloc_x)
+
+    tot_num_blocks=(max_tail_y+1)*(max_tail_x+1)
+    tot_neurons_per_block=tail_bloc_y*tail_bloc_x
+
+    max_num_faulty_neurons=int(neuron_fault_rate*tot_neurons_per_block)
+    max_num_faulty_blocks=int(tot_num_blocks*block_error_rate)
+
+    BlockID_x=[]
+    BlockID_y=[]
+    tmp_val=[]
+
+    print(max_num_faulty_blocks)
+    print(max_num_faulty_neurons)
+
+    while(max_num_faulty_blocks!=0):
+        block_rnd=random.randint(0,tot_num_blocks)
+        if block_rnd not in tmp_val:
+            tmp_val.append(block_rnd)
+            BlockID_x.append(int(block_rnd%(max_tail_x+1)))
+            BlockID_y.append(int(block_rnd/(max_tail_x+1)))
+            max_num_faulty_blocks-=1
+
+    locations=([loc_neuron(layer=layer,dim=dim,shape=shape,BlockID_y=BlockID_y[blk_idx],BlockID_x=BlockID_x[blk_idx],tail_bloc_x=tail_bloc_x,tail_bloc_y=tail_bloc_y) for blk_idx in range(len(BlockID_x)) for _ in range(max_num_faulty_neurons)] * pfi_model.batch_size)
+    
+    batch_order=[i for i in range(pfi_model.batch_size) for _ in range(max_num_faulty_neurons*len(BlockID_x))]
+    
+    # print((locations))
+    # print((batch_order))
+
+    return (locations, batch_order)
+
+
+    
 
 
 class FI_report_classifier(object):
@@ -661,7 +814,8 @@ class FI_report_classifier(object):
         num+=1
         new_golden_name=f"{file_name}_{num}.json"
         old_report_name=f"{file_name}.json"
-        os.system(f"mv {os.path.join(self.log_path,old_report_name)} {os.path.join(self.log_path,new_golden_name)}")
+        if os.path.exists(os.path.join(self.log_path,old_report_name)):
+            os.system(f"mv {os.path.join(self.log_path,old_report_name)} {os.path.join(self.log_path,new_golden_name)}")
         self._report_dictionary=self.load_report(file_name)
         
 
@@ -684,6 +838,7 @@ class FI_report_classifier(object):
         with open(golden_file_path,'w') as Golden_file:
             json.dump(self._report_dictionary,Golden_file)
 
+
     def update_report(self,index,output,target,topk=(1,)):
         maxk=max(topk)
         self._report_dictionary[index]={}
@@ -691,7 +846,7 @@ class FI_report_classifier(object):
         self._report_dictionary[index]['pred']=pred.tolist()
         self._report_dictionary[index]['clas']=clas.tolist()
         self._report_dictionary[index]['target']=target.cpu().tolist()
-
+        
         
     def Fault_parser(self,golden_file_report, faulty_file_report, topk=(1,)):
 
@@ -837,14 +992,41 @@ class FI_framework(object):
                         layer_types=layer_types,
                         use_cuda=use_cuda,
                         )
+        self.pfi_model.print_pytorchfi_layer_summary()
     
-    def bit_flip_err_neuron(self,berr,layer=-1):        
-        locations=([generate_error_list_neurons(self.pfi_model,layer=layer) for _ in range(berr)] * self.pfi_model.batch_size)
-        batch_order=[i for i in range(self.pfi_model.batch_size)]*berr
-        logger.info(locations)
+    def bit_flip_err_neuron(self,fault):
+        
+        print(fault[0])
+        layer_start=fault[0]['layer_start']
+        layer_stop=fault[0]['layer_stop']
+        block_fault_rate=fault[0]['block_fault_rate']
+        neuron_fault_rate=fault[0]['neuron_fault_rate']
+        size_tail_y=fault[0]['size_tail_y']
+        size_tail_x=fault[0]['size_tail_x']
+        bit_faulty_pos=fault[0]['bit_faulty_pos']
+
+
+        #locations=([generate_error_list_neurons(self.pfi_model,layer=layer) for _ in range(berr)] * self.pfi_model.batch_size)
+        #batch_order=[i for i in range(self.pfi_model.batch_size)]*berr        
+        (locations,batch_order)=generate_error_list_neurons_tails(self.pfi_model,
+                                                                  layer=layer_start,
+                                                                  block_error_rate=block_fault_rate,
+                                                                  neuron_fault_rate=neuron_fault_rate,
+                                                                  tail_bloc_y=size_tail_y,
+                                                                  tail_bloc_x=size_tail_x)        
+        #logger.info(locations)
+
+        # this weird list is andatory for the original fasult injector 
+        #self.pfi_model.set_conv_max([255.0 for _ in range(self.pfi_model.get_total_layers())])
+
+        # here I changed it in order to inject bit-flips, more representative
+        self.pfi_model.set_conv_max([bit_faulty_pos])
+
         #print(locations)
         #(layer, C, H, W) = random_neuron_location(self.pfi_model)
         random_layers, random_c, random_h, random_w = map(list, zip(*locations))
+
+        print(random_layers, random_c, random_h, random_w,batch_order)
         #print(batch_order, random_layers, random_c, random_h, random_w)
         self.faulty_model = self.pfi_model.declare_neuron_fault_injection(
             layer_num=random_layers,
@@ -856,7 +1038,14 @@ class FI_framework(object):
         )
         self.faulty_model.eval()
 
-    def bit_flip_weight_inj(self, layer, k, c_in, kH, kW, inj_mask):
+    def bit_flip_weight_inj(self, fault):
+        layer=[fault[0]['layer']]
+        k=[fault[0]['kernel']]
+        c_in=[fault[0]['kernel']]
+        kH=[fault[0]['row']]
+        kW=[fault[0]['col']]
+        inj_mask=[fault[0]['bitmask']]
+
         self._kK=(k)
         self._kC=(c_in)
         self._kH=(kH)
@@ -1004,6 +1193,7 @@ class FI_manager(object):
     def __init__(self,log_path,chpt_file_name,fault_report_name) -> None:
         self.faulty_model=None
         self.pfi_model=None
+        self.fault_list_type='weight'
         self._fault_list=[]
         self.log_msg=''
         self.log_path=log_path
@@ -1025,6 +1215,10 @@ class FI_manager(object):
                 self._fault_list=generate_fault_list_sbfm(self.log_path,self.pfi_model,**kwargs)
             elif(kwargs.get('flist_mode')=='ber'):
                 self._fault_list=generate_fault_list_ber(self.log_path,self.pfi_model,**kwargs)
+
+            elif(kwargs.get('flist_mode')=='neurons'):
+                self._fault_list=generate_fault_neurons_tailing(self.log_path,self.pfi_model,**kwargs)
+
             else:
                 raise ValueError("The fault list can't be generated in this configuration")
         else:
@@ -1032,7 +1226,8 @@ class FI_manager(object):
         
     def iter_fault_list(self):
         for k in range(int(self.FI_report.check_point["fault_idx"]),len(self._fault_list)):
-            fault=self._fault_list[k]
+            fault_info=self._fault_list.iloc[[k]]
+            fault=fault_info.to_dict('records')
             yield (fault, k)    
 
     def write_reports(self):

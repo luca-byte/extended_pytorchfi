@@ -286,18 +286,19 @@ class single_bit_flip_func(core.FaultInjection):
                 )
             )
             for i in inj_list:
-                self.assert_injection_bounds(index=i)
-                prev_value = output[self.corrupt_batch[i]][self.corrupt_dim[0][i]][
-                    self.corrupt_dim[1][i]
-                ][self.corrupt_dim[2][i]]
+                if(i<output.shape[0]):
+                    self.assert_injection_bounds(index=i)
+                    prev_value = output[self.corrupt_batch[i]][self.corrupt_dim[0][i]][
+                        self.corrupt_dim[1][i]
+                    ][self.corrupt_dim[2][i]]
 
-                rand_bit = random.randint(0, self.bits - 1)
-                logger.info(f"Random Bit: {rand_bit}")
-                new_value = self._flip_bit_signed(prev_value, range_max, rand_bit)
+                    rand_bit = random.randint(0, self.bits - 1)
+                    logger.info(f"Random Bit: {rand_bit}")
+                    new_value = self._flip_bit_signed(prev_value, range_max, rand_bit)
 
-                output[self.corrupt_batch[i]][self.corrupt_dim[0][i]][
-                    self.corrupt_dim[1][i]
-                ][self.corrupt_dim[2][i]] = new_value
+                    output[self.corrupt_batch[i]][self.corrupt_dim[0][i]][
+                        self.corrupt_dim[1][i]
+                    ][self.corrupt_dim[2][i]] = new_value
 
         else:
             if self.current_layer == corrupt_conv_set:
@@ -319,7 +320,7 @@ class single_bit_flip_func(core.FaultInjection):
 
     def single_bit_flip_across_batch(self, module, input_val, output):
         corrupt_conv_set = self.corrupt_layer
-        # range_max = self.get_conv_max(self.current_layer)
+        bit_flip_pos = self.get_conv_max(0)
         logger.info(f"Current layer: {self.current_layer}")
         #logger.info(f"Range_max: {range_max}")
         
@@ -338,7 +339,8 @@ class single_bit_flip_func(core.FaultInjection):
                         self.corrupt_dim[1][i]
                     ][self.corrupt_dim[2][i]]
 
-                    rand_bit = random.randint(0, self._max_num_bits(prev_value) - 1)
+                    #rand_bit = random.randint(0, self._max_num_bits(prev_value) - 1)
+                    rand_bit = random.randint(0, bit_flip_pos)
                     logger.info(f"Random Bit: {rand_bit}")
                     new_value = self._bit_flip_value(prev_value, rand_bit)
 
@@ -352,7 +354,8 @@ class single_bit_flip_func(core.FaultInjection):
                     self.corrupt_dim[1]
                 ][self.corrupt_dim[2]]
 
-                rand_bit = random.randint(0, self._max_num_bits(prev_value) - 1)
+                # rand_bit = random.randint(0, self._max_num_bits(prev_value) - 1)
+                rand_bit = random.randint(0, bit_flip_pos)
                 logger.info(f"Random Bit: {rand_bit}")
                 new_value = self._bit_flip_value(prev_value, rand_bit)
 
