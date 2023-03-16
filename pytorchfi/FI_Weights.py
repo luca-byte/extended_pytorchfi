@@ -579,6 +579,13 @@ def generate_error_list_neurons_tails(pfi_model:FaultInjection,layer=-1,block_er
     print(max_num_faulty_blocks)
     print(max_num_faulty_neurons)
 
+    fault_info={
+        'layer':layer,
+        'tot_blocks':tot_num_blocks,
+        'faulty_blocks':max_num_faulty_blocks,
+        'faulty_neuron':max_num_faulty_neurons
+    }
+
     while(max_num_faulty_blocks!=0):
         block_rnd=random.randint(0,tot_num_blocks)
         if block_rnd not in tmp_val:
@@ -593,8 +600,9 @@ def generate_error_list_neurons_tails(pfi_model:FaultInjection,layer=-1,block_er
     
     # print((locations))
     # print((batch_order))
+    
 
-    return (locations, batch_order)
+    return (locations, batch_order, fault_info)
 
 
     
@@ -939,6 +947,7 @@ class FI_report_classifier(object):
         self._report_dictionary=self._FI_dictionary
         self._FI_dictionary={}
         self._golden_dictionary={}
+        
         #self.save_report(faulty_file_report)
             #return(FI_results_json)
 
@@ -1008,13 +1017,14 @@ class FI_framework(object):
 
         #locations=([generate_error_list_neurons(self.pfi_model,layer=layer) for _ in range(berr)] * self.pfi_model.batch_size)
         #batch_order=[i for i in range(self.pfi_model.batch_size)]*berr        
-        (locations,batch_order)=generate_error_list_neurons_tails(self.pfi_model,
+        (locations,batch_order,fault_info)=generate_error_list_neurons_tails(self.pfi_model,
                                                                   layer=layer_start,
                                                                   block_error_rate=block_fault_rate,
                                                                   neuron_fault_rate=neuron_fault_rate,
                                                                   tail_bloc_y=size_tail_y,
                                                                   tail_bloc_x=size_tail_x)        
-        #logger.info(locations)
+        
+        #logger.info()
 
         # this weird list is andatory for the original fasult injector 
         #self.pfi_model.set_conv_max([255.0 for _ in range(self.pfi_model.get_total_layers())])
@@ -1026,7 +1036,6 @@ class FI_framework(object):
         #(layer, C, H, W) = random_neuron_location(self.pfi_model)
         random_layers, random_c, random_h, random_w = map(list, zip(*locations))
 
-        print(random_layers, random_c, random_h, random_w,batch_order)
         #print(batch_order, random_layers, random_c, random_h, random_w)
         self.faulty_model = self.pfi_model.declare_neuron_fault_injection(
             layer_num=random_layers,
@@ -1036,6 +1045,10 @@ class FI_framework(object):
             dim3=random_w,
             function=self.pfi_model.single_bit_flip_across_batch,
         )
+
+        self.log_msg=f"Fault=layer:{fault_info['layer']}, block_rate:{block_fault_rate}, neuron_rate:{neuron_fault_rate}, tot_blocks:{fault_info['tot_blocks']}, faulty_blocks:{fault_info['faulty_blocks']}, faulty_neuron:{fault_info['faulty_neuron']}, bit_loc:{bit_faulty_pos}, "
+        logger.info(self.log_msg)
+        self.log_msg=""
         self.faulty_model.eval()
 
     def bit_flip_weight_inj(self, fault):
