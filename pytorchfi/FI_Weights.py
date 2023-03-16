@@ -434,12 +434,14 @@ def generate_fault_neurons_tailing(path,pfi_model:FaultInjection, **kwargs):
                 fault_dict['layer_stop']=layer[0]
 
             fault_dict['block_fault_rate']=kwargs.get('block_fault_rate')
-            fault_dict['neuron_fault_rate']=kwargs.get('neuron_fault_rate')
+            #fault_dict['neuron_fault_rate']=kwargs.get('neuron_fault_rate')
 
             fault_dict['size_tail_y']=tail_bloc_y
             fault_dict['size_tail_x']=tail_bloc_x
-            for nfr in range(10):
-                fault_dict['neuron_fault_rate']+=0.001
+            n_rate=kwargs.get('neuron_fault_rate')
+            for nfr in range(0,10):
+                n_rate=n_rate+0.001
+                fault_dict['neuron_fault_rate']=n_rate
                 for bit_pos_fault in range(5,32):
                     for _ in (range(Num_trials)):  
                         fault_dict['bit_faulty_pos']=bit_pos_fault                                                                      
