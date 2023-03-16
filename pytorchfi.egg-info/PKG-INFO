@@ -5,11 +5,11 @@ Summary: pytorchfi description
 Home-page: https://github.com/divadnauj-GB/pytorchfi_SC
 Author: Juan David Guerrero
 Author-email: 
-License: UNKNOWN
-Description: pytorchfi description
 Keywords: pytorch,python
-Platform: UNKNOWN
 Classifier: Development Status :: Apha
 Classifier: Programming Language :: Python :: 3
 Requires-Python: >=3.7
 Provides-Extra: test
+License-File: LICENSE
+
+pytorchfi description
