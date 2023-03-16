@@ -1021,7 +1021,7 @@ class FI_framework(object):
         #(layer, C, H, W) = random_neuron_location(self.pfi_model)
         random_layers, random_c, random_h, random_w = map(list, zip(*locations))
 
-        print(random_layers, random_c, random_h, random_w,batch_order)
+        #print(random_layers, random_c, random_h, random_w,batch_order)
         #print(batch_order, random_layers, random_c, random_h, random_w)
         self.faulty_model = self.pfi_model.declare_neuron_fault_injection(
             layer_num=random_layers,
