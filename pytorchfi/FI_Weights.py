@@ -1051,7 +1051,7 @@ class FI_framework(object):
     def bit_flip_weight_inj(self, fault):
         layer=[fault[0]['layer']]
         k=[fault[0]['kernel']]
-        c_in=[fault[0]['kernel']]
+        c_in=[fault[0]['channel']]
         kH=[fault[0]['row']]
         kW=[fault[0]['col']]
         inj_mask=[fault[0]['bitmask']]
