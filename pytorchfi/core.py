@@ -459,11 +459,12 @@ class FaultInjection:
             + "\n"
         )
         for layer, _dim in enumerate(self.output_size):
+            strt_try = "(0,0,0,0)" if "all" in self._inj_layer_types else str(list(self.weights_size[layer]))
             line_new = "{:>5}  {:>15}  {:>10} {:>20} {:>20}".format(
                 layer,
                 str(self.layers_type[layer]).split(".")[-1].split("'")[0],
                 str(self.layers_dim[layer]),
-                str(list(self.weights_size[layer])),
+                strt_try,
                 str(self.output_size[layer]),
             )
             summary_str += line_new + "\n"

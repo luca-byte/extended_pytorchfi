@@ -1,5 +1,6 @@
 LICENSE
 README.md
+pyproject.toml
 setup.py
 pytorchfi/FI_Weights.py
 pytorchfi/__init__.py
