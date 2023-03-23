@@ -438,16 +438,24 @@ def generate_fault_neurons_tailing(path,pfi_model:FaultInjection, **kwargs):
 
             fault_dict['size_tail_y']=tail_bloc_y
             fault_dict['size_tail_x']=tail_bloc_x
-            n_rate=kwargs.get('neuron_fault_rate')
-            for nfr in range(0,10):
-                n_rate=n_rate+0.001
+            n_rate_start=kwargs.get('neuron_fault_rate_start')
+            n_rate_delta=kwargs.get('neuron_fault_rate_delta')
+            n_rate_steps=kwargs.get('neuron_fault_rate_steps')
+            
+            if(n_rate_steps==None or n_rate_delta==None):
+                n_rate_steps = 10
+                n_rate_delta=0.005
+
+            for nfr in range(0,n_rate_steps):
+                n_rate=n_rate_start+nfr*n_rate_delta
                 fault_dict['neuron_fault_rate']=n_rate
                 for bit_pos_fault in range(5,32):
                     for _ in (range(Num_trials)):  
                         fault_dict['bit_faulty_pos']=bit_pos_fault                                                                      
                         new_row=pd.DataFrame(fault_dict, index=[0])
-                        f_list=pd.concat([f_list, new_row],ignore_index=True, sort=False)                                                        
-                        f_list.to_csv(os.path.join(path,fault_list_file),sep=',')
+                        f_list=pd.concat([f_list, new_row],ignore_index=True, sort=False)     
+
+            f_list.to_csv(os.path.join(path,fault_list_file),sep=',')
         else:
             f_list = pd.read_csv(os.path.join(path,fault_list_file),index_col=[0]) 
     return(f_list)
