@@ -453,9 +453,9 @@ def generate_fault_neurons_tailing(path,pfi_model:FaultInjection, **kwargs):
                 n_rate_steps = 1
                 n_rate_delta=0.01
 
-            for bfr in range(1,b_rate_steps):
+            for bfr in range(1,b_rate_steps+1):
                 fault_dict['block_fault_rate']=bfr*b_rate_delta
-                for nfr in range(1,n_rate_steps):
+                for nfr in range(1,n_rate_steps+1):
                     n_rate=nfr*n_rate_delta
                     fault_dict['neuron_fault_rate']=n_rate
                     for bit_pos_fault in range(5,32):
