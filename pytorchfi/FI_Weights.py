@@ -433,27 +433,36 @@ def generate_fault_neurons_tailing(path,pfi_model:FaultInjection, **kwargs):
             else:
                 fault_dict['layer_stop']=layer[0]
 
-            fault_dict['block_fault_rate']=kwargs.get('block_fault_rate')
+           
             #fault_dict['neuron_fault_rate']=kwargs.get('neuron_fault_rate')
-
+            
             fault_dict['size_tail_y']=tail_bloc_y
             fault_dict['size_tail_x']=tail_bloc_x
-            n_rate_start=kwargs.get('neuron_fault_rate_start')
+
+            b_rate_delta=kwargs.get('block_fault_rate_delta')
+            b_rate_steps=kwargs.get('block_fault_rate_steps')
+
             n_rate_delta=kwargs.get('neuron_fault_rate_delta')
             n_rate_steps=kwargs.get('neuron_fault_rate_steps')
             
-            if(n_rate_steps==None or n_rate_delta==None):
-                n_rate_steps = 10
-                n_rate_delta=0.005
+            if(b_rate_steps==None or b_rate_delta==None):
+                b_rate_steps = 1
+                b_rate_delta=0.01
 
-            for nfr in range(0,n_rate_steps):
-                n_rate=n_rate_start+nfr*n_rate_delta
-                fault_dict['neuron_fault_rate']=n_rate
-                for bit_pos_fault in range(5,32):
-                    for _ in (range(Num_trials)):  
-                        fault_dict['bit_faulty_pos']=bit_pos_fault                                                                      
-                        new_row=pd.DataFrame(fault_dict, index=[0])
-                        f_list=pd.concat([f_list, new_row],ignore_index=True, sort=False)     
+            if(n_rate_steps==None or n_rate_delta==None):
+                n_rate_steps = 1
+                n_rate_delta=0.01
+
+            for bfr in range(1,b_rate_steps):
+                fault_dict['block_fault_rate']=bfr*b_rate_delta
+                for nfr in range(1,n_rate_steps):
+                    n_rate=nfr*n_rate_delta
+                    fault_dict['neuron_fault_rate']=n_rate
+                    for bit_pos_fault in range(5,32):
+                        for _ in (range(Num_trials)):  
+                            fault_dict['bit_faulty_pos']=bit_pos_fault                                                                      
+                            new_row=pd.DataFrame(fault_dict, index=[0])
+                            f_list=pd.concat([f_list, new_row],ignore_index=True, sort=False)     
 
             f_list.to_csv(os.path.join(path,fault_list_file),sep=',')
         else:
@@ -576,6 +585,8 @@ def generate_error_list_neurons_tails(pfi_model:FaultInjection,layer=-1,block_er
 
     max_num_faulty_neurons=int(neuron_fault_rate*tot_neurons_per_block)
     max_num_faulty_blocks=int(tot_num_blocks*block_error_rate)
+    if (max_num_faulty_blocks==0):
+        max_num_faulty_blocks = 1
 
     BlockID_x=[]
     BlockID_y=[]
