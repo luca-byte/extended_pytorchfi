@@ -340,7 +340,8 @@ class single_bit_flip_func(core.FaultInjection):
                     ][self.corrupt_dim[2][i]]
 
                     #rand_bit = random.randint(0, self._max_num_bits(prev_value) - 1)
-                    rand_bit = random.randint(0, bit_flip_pos)
+                    # rand_bit = random.randint(0, bit_flip_pos)
+                    rand_bit = bit_flip_pos
                     logger.info(f"Random Bit: {rand_bit}")
                     new_value = self._bit_flip_value(prev_value, rand_bit)
 
@@ -355,7 +356,8 @@ class single_bit_flip_func(core.FaultInjection):
                 ][self.corrupt_dim[2]]
 
                 # rand_bit = random.randint(0, self._max_num_bits(prev_value) - 1)
-                rand_bit = random.randint(0, bit_flip_pos)
+                # rand_bit = random.randint(0, bit_flip_pos)
+                rand_bit = bit_flip_pos
                 logger.info(f"Random Bit: {rand_bit}")
                 new_value = self._bit_flip_value(prev_value, rand_bit)
 
