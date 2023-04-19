@@ -283,6 +283,7 @@ def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
                 layr=random.randint(0,pfi_model.get_total_layers()-1)
             weight_shape=list(pfi_model.get_weights_size(layr))
 
+            print(len(weight_shape))
             if kK_param != None:
                 N=1
             else:
@@ -292,9 +293,12 @@ def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
                 N*=1
             else:
                 N*=weight_shape[1]
-            N=N*weight_shape[2]*weight_shape[3]*(MSB_inection-LSB_injection+1)
+            if(len(weight_shape)==4):
+                N=N*weight_shape[2]*weight_shape[3]*(MSB_inection-LSB_injection+1)
+            else:
+                N=N*(MSB_inection-LSB_injection+1)
 
-            #print(N)
+            print(N)
             n=int(N/(1+(E**2)*(N-1)/((T**2)*P*(1-P))))
             #print(n)                
             i=0
@@ -307,8 +311,13 @@ def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
                     c=kC_param
                 else:
                     c=random.randint(0,weight_shape[1]-1)
-                h=random.randint(0,weight_shape[2]-1)
-                w=random.randint(0,weight_shape[3]-1)
+                if(len(weight_shape)==4):
+                    h=random.randint(0,weight_shape[2]-1)
+                    w=random.randint(0,weight_shape[3]-1)
+                else:
+                    h=None
+                    w=None
+
                 mask=2**(random.randint(LSB_injection,MSB_inection))                
                 fault=[layr,k,c,h,w,mask]
                 if fault not in fault_list :
@@ -1081,9 +1090,15 @@ class FI_framework(object):
         self._kW=(kW)  
         self._inj_mask=(inj_mask)
         self._layer=layer
-        self.faulty_model=self.pfi_model.declare_weight_fault_injection(
-            BitFlip=self._bit_flip_weight, layer_num=layer, k=k, dim1=c_in, dim2=kH, dim3=kW, bitmask=inj_mask
-        )
+        if k!=None or c_in!=None:
+            self.faulty_model=self.pfi_model.declare_weight_fault_injection(
+                BitFlip=self._bit_flip_weight, layer_num=layer, k=k, dim1=c_in, dim2=kH, dim3=kW, bitmask=inj_mask
+            )
+        else:
+            self.faulty_model=self.pfi_model.declare_weight_fault_injection(
+                BitFlip=self._bit_flip_weight, layer_num=layer, k=k, dim1=c_in, bitmask=inj_mask
+            )
+
         self.faulty_model.eval()
 
     def _bit_flip_weight(self,data, location, injmask):
@@ -1183,7 +1198,7 @@ class FI_framework(object):
         fsim_dict['T_Bits']=Tot_N_bits
         fsim_dict['BER']=self._BER
         self.injected_fault=fsim_dict
-
+        
         self.faulty_model=self.pfi_model.declare_weight_fault_injection(
             BitFlip=self._BER_weight, layer_num=self._layer, k=self._kK, dim1=self._kC, dim2=self._kH, dim3=self._kW, bitmask=self._inj_mask
         )
