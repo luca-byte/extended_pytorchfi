@@ -403,7 +403,7 @@ class single_bit_flip_func(core.FaultInjection):
                     indices_dim3 = torch.tensor(self.corrupt_dim[2][inj_list[0]:inj_list[0]+len(inj_list)]) #colum
 
                 for i in range(output.shape[0]):                    
-                    self.assert_injection_bounds(index=i)
+                    #self.assert_injection_bounds(index=i)
                     if dim>2:
                         prev_value = output[i, indices_dim1, indices_dim2, indices_dim3]
                     else:

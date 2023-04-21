@@ -283,7 +283,7 @@ def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
                 layr=random.randint(0,pfi_model.get_total_layers()-1)
             weight_shape=list(pfi_model.get_weights_size(layr))
 
-            print(len(weight_shape))
+            # print(len(weight_shape))
             if kK_param != None:
                 N=1
             else:
@@ -298,7 +298,7 @@ def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
             else:
                 N=N*(MSB_inection-LSB_injection+1)
 
-            print(N)
+            # print(N)
             n=int(N/(1+(E**2)*(N-1)/((T**2)*P*(1-P))))
             #print(n)                
             i=0
@@ -604,8 +604,14 @@ def generate_error_list_neurons_tails(pfi_model:FaultInjection,layer_i=-1,layer_
         if GEMM_x*GEMM_y<tail_bloc_y*tail_bloc_x:
             tail_bloc_x=GEMM_x
             tail_bloc_y=GEMM_y
+        else:
+            if GEMM_y<tail_bloc_y and GEMM_x>=tail_bloc_x:
+                tail_bloc_x=tail_bloc_y*tail_bloc_x/GEMM_y
+                tail_bloc_y=GEMM_y
+            elif GEMM_x<tail_bloc_x and GEMM_y>=tail_bloc_y:
+                tail_bloc_y=tail_bloc_y*tail_bloc_x/GEMM_x
+                tail_bloc_x=GEMM_x
 
-        GEMM_y=shape[1] 
         if(dim==2):
             if(GEMM_y==tail_bloc_y*tail_bloc_x):
                 max_tail_y=0
@@ -637,10 +643,7 @@ def generate_error_list_neurons_tails(pfi_model:FaultInjection,layer_i=-1,layer_
         BlockID_x=[]
         BlockID_y=[]
         tmp_val=[]
-
-        print(max_num_faulty_blocks)
-        print(max_num_faulty_neurons)
-
+        
         fault_info[layer]={'layer':layer,
                            'tot_blocks':tot_num_blocks,
                            'faulty_blocks':max_num_faulty_blocks,
