@@ -550,9 +550,16 @@ def generate_error_list_neurons(pfi_model:FaultInjection,layer=-1,channel=-1,row
     return (layer, dim1_rand, dim2_rand, dim3_rand)
 
 
-def loc_neuron(layer=-1,dim=1,shape=[],BlockID_y=1,BlockID_x=1,tail_bloc_y=1,tail_bloc_x=1,):
-    dy=random.randint(0,tail_bloc_y-1)
-    dx=random.randint(0,tail_bloc_x-1)
+def loc_neuron(layer=-1,dim=1,shape=[],BlockID_y=1,BlockID_x=1,Neuron_x=-1,Neuron_y=-1,tail_bloc_y=1,tail_bloc_x=1,):
+    if Neuron_y==-1:
+        dy=random.randint(0,tail_bloc_y-1)
+    else:
+        dy=Neuron_y
+    if Neuron_x==-1:
+        dx=random.randint(0,tail_bloc_x-1)
+    else:
+        dx=Neuron_x
+
     if dim>3:
         dim1_rand=int((BlockID_y*tail_bloc_y+dy)/tail_bloc_y)
         dim2_rand=int((BlockID_x*tail_bloc_x+dx)/shape[2])
@@ -567,66 +574,109 @@ def loc_neuron(layer=-1,dim=1,shape=[],BlockID_y=1,BlockID_x=1,tail_bloc_y=1,tai
         if(dim3_rand>=shape[3]):
             dim3_rand=shape[3]-1
 
-    else:
+    else:        
+        dim1_rand=int((BlockID_y*tail_bloc_y+dy)/tail_bloc_y)
         dim2_rand=None
         dim3_rand=None
+
     return(layer, dim1_rand, dim2_rand, dim3_rand)
 
 
-def generate_error_list_neurons_tails(pfi_model:FaultInjection,layer=-1,block_error_rate=1,neuron_fault_rate=0.001,tail_bloc_y=32,tail_bloc_x=32):
-    if layer == -1:
-        layer = random.randint(0, pfi_model.get_total_layers() - 1)
+def generate_error_list_neurons_tails(pfi_model:FaultInjection,layer_i=-1,layer_n=-1,block_error_rate=1,neuron_fault_rate=0.001,tail_bloc_y=32,tail_bloc_x=32):
+    if layer_i == -1:
+        layer_i = random.randint(0, pfi_model.get_total_layers() - 1)
+    if layer_n == -1:
+       layer_n = layer_i
 
-    dim = pfi_model.get_layer_dim(layer)
-    shape = pfi_model.get_layer_shape(layer)
+    locations=[]
+    batch_order=[]
+    fault_info={}
+    for layer in range(layer_i,layer_n+1):
+        dim = pfi_model.get_layer_dim(layer)
+        shape = pfi_model.get_layer_shape(layer)
 
-    GEMM_y=shape[1]
-    if(dim>3):
-        GEMM_x=shape[2]*shape[3]
-    else:
-        GEMM_x=1
+        GEMM_y=shape[1] 
+        if(dim==2):
+            GEMM_x=1    
+        else:
+            GEMM_x=shape[2]*shape[3]
 
-    max_tail_y= int(GEMM_y/tail_bloc_y)
-    max_tail_x= int(GEMM_x/tail_bloc_x)
+        if GEMM_x*GEMM_y<tail_bloc_y*tail_bloc_x:
+            tail_bloc_x=GEMM_x
+            tail_bloc_y=GEMM_y
 
-    tot_num_blocks=(max_tail_y+1)*(max_tail_x+1)
-    tot_neurons_per_block=tail_bloc_y*tail_bloc_x
+        GEMM_y=shape[1] 
+        if(dim==2):
+            if(GEMM_y==tail_bloc_y*tail_bloc_x):
+                max_tail_y=0
+            else:
+                max_tail_y= int(GEMM_y/tail_bloc_y*tail_bloc_x)
+            if(GEMM_x==tail_bloc_y*tail_bloc_x):
+                max_tail_x=0
+            else:
+                max_tail_x= int(GEMM_x/tail_bloc_y*tail_bloc_x)    
+        else:
+            if(GEMM_y==tail_bloc_y):
+                max_tail_y=0
+            else:
+                max_tail_y= int(GEMM_y/tail_bloc_y)
+            if(GEMM_x==tail_bloc_x):
+                max_tail_x=0
+            else:
+                max_tail_x= int(GEMM_x/tail_bloc_x)   
 
-    max_num_faulty_neurons=int(neuron_fault_rate*tot_neurons_per_block)
-    max_num_faulty_blocks=int(tot_num_blocks*block_error_rate)
-    if (max_num_faulty_blocks==0):
-        max_num_faulty_blocks = 1
+        tot_num_blocks=(max_tail_y+1)*(max_tail_x+1)
+        tot_neurons_per_block=tail_bloc_y*tail_bloc_x
 
-    BlockID_x=[]
-    BlockID_y=[]
-    tmp_val=[]
+        max_num_faulty_neurons=int(neuron_fault_rate*tot_neurons_per_block)
+        max_num_faulty_blocks=int(tot_num_blocks*block_error_rate)
 
-    print(max_num_faulty_blocks)
-    print(max_num_faulty_neurons)
+        if (max_num_faulty_blocks==0):
+            max_num_faulty_blocks = 1
 
-    fault_info={
-        'layer':layer,
-        'tot_blocks':tot_num_blocks,
-        'faulty_blocks':max_num_faulty_blocks,
-        'faulty_neuron':max_num_faulty_neurons
-    }
+        BlockID_x=[]
+        BlockID_y=[]
+        tmp_val=[]
 
-    while(max_num_faulty_blocks!=0):
-        block_rnd=random.randint(0,tot_num_blocks)
-        if block_rnd not in tmp_val:
-            tmp_val.append(block_rnd)
-            BlockID_x.append(int(block_rnd%(max_tail_x+1)))
-            BlockID_y.append(int(block_rnd/(max_tail_x+1)))
-            max_num_faulty_blocks-=1
+        print(max_num_faulty_blocks)
+        print(max_num_faulty_neurons)
 
-    locations=([loc_neuron(layer=layer,dim=dim,shape=shape,BlockID_y=BlockID_y[blk_idx],BlockID_x=BlockID_x[blk_idx],tail_bloc_x=tail_bloc_x,tail_bloc_y=tail_bloc_y) for blk_idx in range(len(BlockID_x)) for _ in range(max_num_faulty_neurons)] * pfi_model.batch_size)
-    
-    batch_order=[i for i in range(pfi_model.batch_size) for _ in range(max_num_faulty_neurons*len(BlockID_x))]
-    
-    # print((locations))
-    # print((batch_order))
-    
+        fault_info[layer]={'layer':layer,
+                           'tot_blocks':tot_num_blocks,
+                           'faulty_blocks':max_num_faulty_blocks,
+                           'faulty_neuron':max_num_faulty_neurons}
 
+        while(max_num_faulty_blocks!=0):
+            block_rnd=random.randint(0,tot_num_blocks)
+            if block_rnd not in tmp_val:
+                tmp_val.append(block_rnd)
+                BlockID_x.append(int(block_rnd%(max_tail_x+1)))
+                BlockID_y.append(int(block_rnd/(max_tail_x+1)))
+                max_num_faulty_blocks-=1
+        
+        Neuron_x=[]
+        Neuron_y=[]
+        tmp_val=[]
+        while(max_num_faulty_neurons!=0):
+            neuron_rnd = random.randint(0,tot_neurons_per_block)
+            if neuron_rnd not in tmp_val:
+                tmp_val.append(neuron_rnd)
+                Neuron_x.append(int(neuron_rnd%(tail_bloc_x+1)))
+                Neuron_y.append(int(neuron_rnd/(tail_bloc_x+1)))
+                max_num_faulty_neurons-=1
+
+        #locations=([loc_neuron(layer=layer,dim=dim,shape=shape,BlockID_y=BlockID_y[blk_idx],BlockID_x=BlockID_x[blk_idx],tail_bloc_x=tail_bloc_x,tail_bloc_y=tail_bloc_y) for blk_idx in range(len(BlockID_x)) for _ in range(max_num_faulty_neurons)] * pfi_model.batch_size)
+        
+        batch_orderx=[0 for _ in range(len(Neuron_x)*len(BlockID_x))]
+        
+        
+        for blokid in range(len(BlockID_x)):
+            for neuronid in range(len(Neuron_x)):
+                locations.append(loc_neuron(layer=layer,dim=dim,shape=shape,
+                                            BlockID_y=BlockID_y[blokid],BlockID_x=BlockID_x[blokid],
+                                            Neuron_x=Neuron_x[neuronid],Neuron_y=Neuron_y[neuronid],
+                                            tail_bloc_x=tail_bloc_x,tail_bloc_y=tail_bloc_y))
+        batch_order.extend(batch_orderx)
     return (locations, batch_order, fault_info)
 
 
@@ -1043,7 +1093,8 @@ class FI_framework(object):
         #locations=([generate_error_list_neurons(self.pfi_model,layer=layer) for _ in range(berr)] * self.pfi_model.batch_size)
         #batch_order=[i for i in range(self.pfi_model.batch_size)]*berr        
         (locations,batch_order,fault_info)=generate_error_list_neurons_tails(self.pfi_model,
-                                                                  layer=layer_start,
+                                                                  layer_i=layer_start,
+                                                                  layer_n=layer_stop,
                                                                   block_error_rate=block_fault_rate,
                                                                   neuron_fault_rate=neuron_fault_rate,
                                                                   tail_bloc_y=size_tail_y,
@@ -1060,7 +1111,7 @@ class FI_framework(object):
         #print(locations)
         #(layer, C, H, W) = random_neuron_location(self.pfi_model)
         random_layers, random_c, random_h, random_w = map(list, zip(*locations))
-
+        print(f"lengts={len(random_layers)} {len(batch_order)} {len(random_c)} {len(random_h)} {len(random_w)}")
         #print(batch_order, random_layers, random_c, random_h, random_w)
         self.faulty_model = self.pfi_model.declare_neuron_fault_injection(
             layer_num=random_layers,
@@ -1068,11 +1119,11 @@ class FI_framework(object):
             dim1=random_c,
             dim2=random_h,
             dim3=random_w,
-            function=self.pfi_model.single_bit_flip_across_batch,
+            function=self.pfi_model.single_bit_flip_across_batch_tensor,
         )
-
-        self.log_msg=f"Fault=layer:{fault_info['layer']}, block_rate:{block_fault_rate}, neuron_rate:{neuron_fault_rate}, tot_blocks:{fault_info['tot_blocks']}, faulty_blocks:{fault_info['faulty_blocks']}, faulty_neuron:{fault_info['faulty_neuron']}, bit_loc:{bit_faulty_pos}, "
-        logger.info(self.log_msg)
+        for key in fault_info:
+            self.log_msg=f"Fault=layer:{fault_info[key]['layer']}, block_rate:{block_fault_rate}, neuron_rate:{neuron_fault_rate}, tot_blocks:{fault_info[key]['tot_blocks']}, faulty_blocks:{fault_info[key]['faulty_blocks']}, faulty_neuron:{fault_info[key]['faulty_neuron']}, bit_loc:{bit_faulty_pos}, "
+            logger.info(self.log_msg)
         self.log_msg=""
         self.faulty_model.eval()
 

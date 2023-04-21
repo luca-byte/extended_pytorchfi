@@ -201,14 +201,26 @@ class single_bit_flip_func(core.FaultInjection):
         
 
     
-    def _bit_flip_value(self,orig_value, bit_pos):
-        save_type = orig_value.dtype
-        orig_data=float(orig_value)
-        injmask=2**bit_pos
-        data_32bit=int(self._float_to_hex(orig_data),16)
-        corrupt_32bit=data_32bit ^ int(injmask)
-        corrupt_val=self._int_to_float(corrupt_32bit)
-        return torch.tensor(corrupt_val, dtype=save_type)
+    # def _bit_flip_value(self,orig_value, bit_pos):
+    #     save_type = orig_value.dtype
+    #     orig_data=float(orig_value)
+    #     injmask=2**bit_pos
+    #     data_32bit=int(self._float_to_hex(orig_data),16)
+    #     corrupt_32bit=data_32bit ^ int(injmask)
+    #     corrupt_val=self._int_to_float(corrupt_32bit)
+    #     return torch.tensor(corrupt_val, dtype=save_type)
+    
+    def _bit_flip_value(self,orig_values, bit_pos):
+        # Convert tensor to float values
+        orig_data = orig_values.float()
+
+        # Generate injection mask for bit flip
+        injmask = 2 ** bit_pos
+
+        data_32bit = orig_data.view(torch.int32)
+        corrupt_32bit = torch.bitwise_xor(data_32bit,injmask.type(torch.int32))
+        corrupt_val = corrupt_32bit.view(torch.float)
+        return corrupt_val
 
     @staticmethod
     def _twos_comp(val, bits):
@@ -369,6 +381,70 @@ class single_bit_flip_func(core.FaultInjection):
         if self.current_layer >= len(self.output_size):
             self.reset_current_layer()
 
+    def single_bit_flip_across_batch_tensor(self, module, input_val, output):
+        corrupt_conv_set = self.corrupt_layer
+        bit_flip_pos = self.get_conv_max(0)
+        logger.info(f"Current layer: {self.current_layer}")
+        #logger.info(f"Range_max: {range_max}")
+        
+        if type(corrupt_conv_set) is list:
+            inj_list = list(
+                filter(
+                    lambda x: corrupt_conv_set[x] == self.current_layer,
+                    range(len(corrupt_conv_set)),
+                )
+            )                  
+            if(len(inj_list)>0):                 
+                dim=len(list(output.size()))
+                indices_dim0 = torch.tensor(self.corrupt_batch) # batch
+                indices_dim1 = torch.tensor(self.corrupt_dim[0][inj_list[0]:inj_list[0]+len(inj_list)]) # channel
+                if(dim>2):
+                    indices_dim2 = torch.tensor(self.corrupt_dim[1][inj_list[0]:inj_list[0]+len(inj_list)]) # row
+                    indices_dim3 = torch.tensor(self.corrupt_dim[2][inj_list[0]:inj_list[0]+len(inj_list)]) #colum
+
+                for i in range(output.shape[0]):                    
+                    self.assert_injection_bounds(index=i)
+                    if dim>2:
+                        prev_value = output[i, indices_dim1, indices_dim2, indices_dim3]
+                    else:
+                        prev_value = output[i, indices_dim1]
+
+                    rand_bit = torch.tensor([bit_flip_pos],device=output.device.type)
+
+                    logger.info(f"Random Bit: {bit_flip_pos}")
+
+                    new_value = self._bit_flip_value(prev_value, rand_bit)
+                    if dim>2:
+                        output[i, indices_dim1, indices_dim2, indices_dim3] = new_value
+                    else:
+                        output[i, indices_dim1] = new_value
+
+        else:
+            if self.current_layer == corrupt_conv_set:
+                dim=len(list(output.size()))
+                indices_dim0 = torch.tensor(self.corrupt_batch) # batch
+                indices_dim1 = torch.tensor(self.corrupt_dim[0]) # channel
+                if(dim>2):
+                    indices_dim2 = torch.tensor(self.corrupt_dim[1]) # row
+                    indices_dim3 = torch.tensor(self.corrupt_dim[2]) #colum
+
+                if dim>2:
+                    prev_value = output[i, indices_dim1, indices_dim2, indices_dim3]
+                else:
+                    prev_value = output[i, indices_dim1]
+                rand_bit = torch.tensor([bit_flip_pos],device=output.device.type)
+
+                logger.info(f"Random Bit: {bit_flip_pos}")
+
+                new_value = self._bit_flip_value(prev_value, rand_bit)
+                if dim>2:
+                    output[i, indices_dim1, indices_dim2, indices_dim3] = new_value
+                else:
+                    output[i, indices_dim1] = new_value
+
+        self.update_layer()
+        if self.current_layer >= len(self.output_size):
+            self.reset_current_layer()
 
 def random_neuron_single_bit_inj_batched(
     pfi: core.FaultInjection, layer_ranges, batch_random=True
