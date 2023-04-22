@@ -730,7 +730,7 @@ class FI_report_classifier(object):
         self.GACCk=torch.tensor([0.0])
         self.FACC1=torch.tensor([0.0])
         self.FACCk=torch.tensor([0.0])
-
+        self.Full_report=pd.DataFrame()
 
         self.Accm_SDC_top1=0
         self.Accm_SDC_top5=0
@@ -938,7 +938,7 @@ class FI_report_classifier(object):
 
         self._golden_dictionary=self.load_report(golden_file_report)
         self._FI_dictionary=self.load_report(faulty_file_report)
-
+        self.Full_report = pd.DataFrame()
         for index in self._golden_dictionary:
             self.Golden=self._golden_dictionary[index]
             G_pred=torch.tensor(self.Golden['pred'],requires_grad=False).t()
@@ -974,7 +974,7 @@ class FI_report_classifier(object):
                 FI_target=torch.tensor(self.Faulty['target'],requires_grad=False)
 
                 
-                CMPFaulty=FI_clas.eq(FI_target[None]) 
+                CMPFaulty=FI_clas.eq(FI_target[None]) # bolean comparison between twoo tnesors of different shape
 
                 self.Facc1=CMPFaulty[:mink].sum(dim=0,dtype=torch.float32)
                 self.Facc5=CMPFaulty[:maxk].sum(dim=0,dtype=torch.float32)
@@ -1010,7 +1010,23 @@ class FI_report_classifier(object):
                     else:
                         self.T5_Critical+=1
                         ResTop5.append("Critical")
+                    
+                    FaultID=faulty_file_report.split("/")[-1].split(".")[0]
 
+                    if ((G_target[img]==G_clas.t()[img][0]) and (G_target[img]!=FI_clas.t()[img][0])
+                        ) or ((G_target[img] in G_clas.t()[img]) and (G_target[img] not in FI_clas.t()[img])):
+                        for idx,val in enumerate(G_pred.t()[img]): 
+                            df1 = pd.DataFrame({'FaultID':FaultID,
+                                                'imID': (batch_size*int(index)+img),                                    
+                                                'Pred_idx':idx,
+                                                'G_pred':val.item(),
+                                                'F_pred':FI_pred.t()[img][idx].item(),
+                                                'G_clas':G_clas.t()[img][idx].item(),                                      
+                                                'F_clas':FI_clas.t()[img][idx].item(),
+                                                'G_Target':G_target[img].item()},index=[0])  
+                            self.Full_report = pd.concat([self.Full_report,df1],ignore_index=True)
+
+                    
                 self._FI_dictionary[index]['ResTop1']=ResTop1 
                 self._FI_dictionary[index]['ResTopk']=ResTop5 
 
@@ -1021,13 +1037,23 @@ class FI_report_classifier(object):
 
                 self._faul_acc1+=faul_result_list[0]
                 self._faul_acck+=faul_result_list[1]
-
+        else:
+            self.T5_Critical+=self._num_images
+            self.T1_Critical+=self._num_images
+        file_name=faulty_file_report.split('/')[-1].split('.')[0]
+        csv_report=f"{file_name}.csv"
+        self.Full_report.to_csv(os.path.join(self.log_path,csv_report))
+           
         self._report_dictionary=self._FI_dictionary
         self._FI_dictionary={}
         self._golden_dictionary={}
         
         #self.save_report(faulty_file_report)
             #return(FI_results_json)
+
+    def merge_reports(self):
+        pass
+
 
 
 class FI_framework(object):
@@ -1331,7 +1357,12 @@ class FI_manager(object):
     def write_reports(self):
         self.FI_report.set_fault_report(self.FI_framework.injected_fault)
         self.FI_report.update_check_point()
-        self.FI_report.save_report(self._faulty_file_name)
+        file_name=self._faulty_file_name.split('/')[-1].split('.')[0]
+        csv_report=f"{file_name}.csv"
+        self.FI_report.Full_report.to_csv(os.path.join(self.log_path,csv_report))
+        if os.path.exists(f"{self.log_path}/{self._faulty_file_name}.json"):
+            os.remove(f"{self.log_path}/{self._faulty_file_name}.json")
+        #self.FI_report.save_report(self._faulty_file_name)
 
     def load_check_point(self):
         self.FI_report.load_check_point()
@@ -1352,6 +1383,10 @@ class FI_manager(object):
         self.FI_report.save_report(self._faulty_file_name)
 
 
-    def parse_results(self):        
+    def parse_results(self):    
+        self.close_faulty_results()    
         self.FI_report.Fault_parser(self._golden_file_name,self._faulty_file_name,topk=(1,5))
-        
+        self.write_reports()
+    
+    def terminate_fsim(self):
+        pass
