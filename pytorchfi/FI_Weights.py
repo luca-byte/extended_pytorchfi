@@ -1037,12 +1037,13 @@ class FI_report_classifier(object):
 
                 self._faul_acc1+=faul_result_list[0]
                 self._faul_acck+=faul_result_list[1]
-        else:
-            self.T5_Critical+=self._num_images
-            self.T1_Critical+=self._num_images
+            else:
+                self.T5_Critical+=batch_size
+                self.T1_Critical+=batch_size
         file_name=faulty_file_report.split('/')[-1].split('.')[0]
         csv_report=f"{file_name}.csv"
-        self.Full_report.to_csv(os.path.join(self.log_path,csv_report))
+        if(len(self.Full_report)>0):
+            self.Full_report.to_csv(os.path.join(self.log_path,csv_report))
            
         self._report_dictionary=self._FI_dictionary
         self._FI_dictionary={}
