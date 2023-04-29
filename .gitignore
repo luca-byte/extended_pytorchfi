@@ -4,4 +4,5 @@ data
 .idea/
 test/__init__.py*
 test/unit_tests/__init__.py*
+pytorchfi.egg-info/
 venv/
