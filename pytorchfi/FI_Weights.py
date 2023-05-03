@@ -1056,7 +1056,6 @@ class FI_report_classifier(object):
         pass
 
 
-
 class FI_framework(object):
     def __init__(self,log_path,mode='single_fault') -> None:
         # self.fault_dictionary={}   
