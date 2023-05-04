@@ -5,13 +5,7 @@
   </br>
 </h1>
 
-<p align="center">
-    <a href="https://pypi.org/project/pytorchfi/"><img src="https://img.shields.io/pypi/v/pytorchfi"></img></a>
-    <img src="https://img.shields.io/github/checks-status/hack4impact-uiuc/ymca/master"></img>
-    <a href="https://codecov.io/gh/pytorchfi/pytorchfi"><img src="https://codecov.io/gh/pytorchfi/pytorchfi/branch/master/graph/badge.svg"></a>
-    <a href="https://pypi.org/project/pytorchfi/"><img src="https://img.shields.io/pypi/dm/pytorchfi?color=pink"></a>
-    <a href="https://opensource.org/licenses/NCSA"><img src="https://img.shields.io/badge/license-NCSA-blue"></a>
-</p>
+[![codecov](https://codecov.io/gh/divadnauj-GB/pytorchfi_SC/branch/main/graph/badge.svg?token=WETJBPMAUN)](https://codecov.io/gh/divadnauj-GB/pytorchfi_SC)
 
 <p align="center">
   <a href="#background">Background</a> •
