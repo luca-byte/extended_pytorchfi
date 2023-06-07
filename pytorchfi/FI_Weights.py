@@ -276,6 +276,7 @@ def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
             layer_param=kwargs.get('layer')
             kK_param=kwargs.get('kernel')
             kC_param=kwargs.get('channel')
+            num_faults=kwargs.get('num_faults')
             pfi_model.print_pytorchfi_layer_summary()            
             print(pfi_model.get_total_layers())
             if layer_param!= None:
@@ -301,6 +302,8 @@ def generate_fault_list_sbfm(path,pfi_model:FaultInjection, **kwargs):
 
             # print(N)
             n=int(N/(1+(E**2)*(N-1)/((T**2)*P*(1-P))))
+            if num_faults!= None:
+                n=num_faults
             #print(n)                
             i=0
             while i<n:
