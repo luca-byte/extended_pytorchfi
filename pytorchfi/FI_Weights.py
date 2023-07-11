@@ -20,6 +20,8 @@ from pytorchfi.util import random_value
 from pytorchfi.core import *
 from pytorchfi.neuron_error_models import *
 
+import multiprocessing
+
 logger=logging.getLogger("Fault_injection") 
 logger.setLevel(logging.DEBUG) 
 
@@ -708,8 +710,13 @@ class FI_report_classifier(object):
         self._faul_acck=torch.tensor([0.0])
         self.fault_f1_1=torch.tensor([0.0])
         self.fault_f1_k=torch.tensor([0.0])
-        
+
         self._report_dictionary={}
+
+        self.shared_dict_pred={}
+        self.shared_dict_clas={}
+        self.shared_dict_target={}
+
         self._FI_results_dictionary={}
         self._fault_dictionary={}        
         self.Top1_faulty_code=0
@@ -948,10 +955,27 @@ class FI_report_classifier(object):
         self._report_dictionary[index]['pred']=pred.tolist()
         self._report_dictionary[index]['clas']=clas.tolist()
         self._report_dictionary[index]['target']=target.cpu().tolist()
+        #print(self._report_dictionary)
         
-        
-    def Fault_parser(self,golden_file_report, faulty_file_report, topk=(1,)):
+    def update_report_shared_dict(self,index,output,target,topk=(1,)):
+        maxk=max(topk)        
+        pred, clas=output.cpu().topk(maxk,1,True,True)
+        self.shared_dict_pred[index]=pred.tolist()
+        self.shared_dict_clas[index]=clas.tolist()
+        self.shared_dict_target[index]=target.cpu().tolist()
 
+    def merge_shared_report(self):
+        self._report_dictionary={}
+        for key in self.shared_dict_pred:
+            if (key in self.shared_dict_pred) and (key in self.shared_dict_clas) and (key in self.shared_dict_target):
+                self._report_dictionary[key]={}
+                self._report_dictionary[key]['pred']=self.shared_dict_pred[key]
+                self._report_dictionary[key]['clas']=self.shared_dict_clas[key]
+                self._report_dictionary[key]['target']=self.shared_dict_target[key]
+
+
+
+    def Fault_parser(self,golden_file_report, faulty_file_report, topk=(1,)):
         self._golden_dictionary=self.load_report(golden_file_report)
         self._FI_dictionary=self.load_report(faulty_file_report)
         self.Full_report = pd.DataFrame()
@@ -988,15 +1012,15 @@ class FI_report_classifier(object):
             # best f1 score (golden)
             tot_classes = len(torch.unique(G_clas))
             golden_best_preds = torch.squeeze(G_clas[:mink])
-            f1 = F1Score(task='multiclass', num_classes= tot_classes)
-            self.goldenf1_1 = f1(golden_best_preds, G_target)
+            #f1 = F1Score(task='multiclass', num_classes= tot_classes)
+            #self.goldenf1_1 = f1(golden_best_preds, G_target)
             
 
             # kth best f1 score, sum of f1's (golden)
-            goldenf1_k_score = 0
-            for pred in G_clas[:maxk]:
-                goldenf1_k_score += f1(pred, G_target)
-            self.goldenf1_k = goldenf1_k_score
+            #goldenf1_k_score = 0
+            #for pred in G_clas[:maxk]:
+            #    goldenf1_k_score += f1(pred, G_target)
+            #self.goldenf1_k = goldenf1_k_score
 
             if index in self._FI_dictionary:
                 ResTop1=""
@@ -1076,14 +1100,14 @@ class FI_report_classifier(object):
                 # best f1 score (fault)
                 tot_classes_FI = len(torch.unique(FI_clas))
                 FI_best_preds = torch.squeeze(FI_clas[:mink])
-                f1 = F1Score(task='multiclass', num_classes= tot_classes_FI)
-                self.fault_f1_1 += f1(FI_best_preds, FI_target)
+                #f1 = F1Score(task='multiclass', num_classes= tot_classes_FI)
+                #self.fault_f1_1 += f1(FI_best_preds, FI_target)
 
                 # kth best f1 score, sum of f1's (fault)
-                FIf1_k_score = 0
-                for pred in G_clas[:maxk]:
-                    FIf1_k_score += f1(pred, G_target)
-                self.fault_f1_k += FIf1_k_score
+                # FIf1_k_score = 0
+                # for pred in G_clas[:maxk]:
+                #     FIf1_k_score += f1(pred, G_target)
+                # self.fault_f1_k += FIf1_k_score
                 
             else:
                 self.T5_Critical+=batch_size
@@ -1093,7 +1117,7 @@ class FI_report_classifier(object):
         if(len(self.Full_report)>0):
             self.Full_report.to_csv(os.path.join(self.log_path,csv_report))
            
-        self._report_dictionary=self._FI_dictionary
+        #self._report_dictionary=self._FI_dictionary
         self._FI_dictionary={}
         self._golden_dictionary={}
         
