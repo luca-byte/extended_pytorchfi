@@ -960,8 +960,8 @@ class FI_report_classifier(object):
     def update_report_shared_dict(self,index,output,target,topk=(1,)):
         maxk=max(topk)        
         pred, clas=output.cpu().topk(maxk,1,True,True)
-        self.shared_dict_pred[index]=pred.tolist()
-        self.shared_dict_clas[index]=clas.tolist()
+        self.shared_dict_pred[index]=pred.cpu().tolist()
+        self.shared_dict_clas[index]=clas.cpu().tolist()
         self.shared_dict_target[index]=target.cpu().tolist()
 
     def merge_shared_report(self):
