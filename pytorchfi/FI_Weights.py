@@ -5,7 +5,7 @@ import json
 import sys, os
 import pandas as pd
 import math
-from torchmetrics import F1Score
+#from torchmetrics import F1Score
 # forse funziona, cambia il file sh da cuda a cpu
 import matplotlib.pyplot as plt
 
@@ -22,8 +22,8 @@ from pytorchfi.neuron_error_models import *
 
 import multiprocessing
 
-logger=logging.getLogger("Fault_injection") 
-logger.setLevel(logging.DEBUG) 
+from pytorchfi.util import def_logger_pfi
+logger=def_logger_pfi.getChild(__name__)
 
 # _bf_inj_w_mask=0
 # _layer=0

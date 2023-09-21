@@ -10,8 +10,8 @@ import torch.nn as nn
 
  
 
-logger=logging.getLogger("pytorchfi") 
-logger.setLevel(logging.DEBUG) 
+from pytorchfi.util import def_logger_pfi
+logger=def_logger_pfi.getChild(__name__)
 
 class FaultInjection:
     def __init__(
