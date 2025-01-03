@@ -11,8 +11,8 @@ from pytorchfi.util import random_value
 
 # Helper Functions
 
-from pytorchfi.util import def_logger_pfi
-logger=def_logger_pfi.getChild(__name__)
+logger=logging.getLogger("pytorchfi") 
+logger.setLevel(logging.DEBUG) 
 
 def random_batch_element(pfi: core.FaultInjection):
     return random.randint(0, pfi.batch_size - 1)
@@ -333,7 +333,7 @@ class single_bit_flip_func(core.FaultInjection):
     def single_bit_flip_across_batch(self, module, input_val, output):
         corrupt_conv_set = self.corrupt_layer
         bit_flip_pos = self.get_conv_max(0)
-        #logger.info(f"Current layer: {self.current_layer}")
+        logger.info(f"Current layer: {self.current_layer}")
         #logger.info(f"Range_max: {range_max}")
         
         if type(corrupt_conv_set) is list:
@@ -354,7 +354,7 @@ class single_bit_flip_func(core.FaultInjection):
                     #rand_bit = random.randint(0, self._max_num_bits(prev_value) - 1)
                     # rand_bit = random.randint(0, bit_flip_pos)
                     rand_bit = bit_flip_pos
-                    #logger.info(f"Random Bit: {rand_bit}")
+                    logger.info(f"Random Bit: {rand_bit}")
                     new_value = self._bit_flip_value(prev_value, rand_bit)
 
                     output[self.corrupt_batch[i]][self.corrupt_dim[0][i]][
@@ -370,7 +370,7 @@ class single_bit_flip_func(core.FaultInjection):
                 # rand_bit = random.randint(0, self._max_num_bits(prev_value) - 1)
                 # rand_bit = random.randint(0, bit_flip_pos)
                 rand_bit = bit_flip_pos
-                #logger.info(f"Random Bit: {rand_bit}")
+                logger.info(f"Random Bit: {rand_bit}")
                 new_value = self._bit_flip_value(prev_value, rand_bit)
 
                 output[self.corrupt_batch][self.corrupt_dim[0]][self.corrupt_dim[1]][
@@ -384,7 +384,7 @@ class single_bit_flip_func(core.FaultInjection):
     def single_bit_flip_across_batch_tensor(self, module, input_val, output):
         corrupt_conv_set = self.corrupt_layer
         bit_flip_pos = self.get_conv_max(0)
-        #logger.info(f"Current layer: {self.current_layer}")
+        logger.info(f"Current layer: {self.current_layer}")
         #logger.info(f"Range_max: {range_max}")
         
         if type(corrupt_conv_set) is list:
@@ -411,7 +411,7 @@ class single_bit_flip_func(core.FaultInjection):
 
                     rand_bit = torch.tensor([bit_flip_pos],device=output.device.type)
 
-                    #logger.info(f"Random Bit: {bit_flip_pos}")
+                    logger.info(f"Random Bit: {bit_flip_pos}")
 
                     new_value = self._bit_flip_value(prev_value, rand_bit)
                     if dim>2:
@@ -434,7 +434,7 @@ class single_bit_flip_func(core.FaultInjection):
                     prev_value = output[i, indices_dim1]
                 rand_bit = torch.tensor([bit_flip_pos],device=output.device.type)
 
-                #logger.info(f"Random Bit: {bit_flip_pos}")
+                logger.info(f"Random Bit: {bit_flip_pos}")
 
                 new_value = self._bit_flip_value(prev_value, rand_bit)
                 if dim>2:
@@ -445,6 +445,8 @@ class single_bit_flip_func(core.FaultInjection):
         self.update_layer()
         if self.current_layer >= len(self.output_size):
             self.reset_current_layer()
+
+        
 
 def random_neuron_single_bit_inj_batched(
     pfi: core.FaultInjection, layer_ranges, batch_random=True
