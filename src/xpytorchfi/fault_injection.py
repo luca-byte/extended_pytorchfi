@@ -69,12 +69,12 @@ class FIFramework:
         Injects a fault into the model based on the specified policy.
 
         Args:
-        policy (str): The fault injection policy to use ('sbfm', 'neuron', 'ber').
+        policy (str): The fault injection policy to use ('sbfm', 'neurons', 'ber').
         fault (List[Dict]): A list containing a single dictionary with the fault parameters, structured according to the policy requirements.
         """
         if policy == "sbfm":
             self.inject_bfw_fault(fault)
-        elif policy == "neuron":
+        elif policy == "neurons":
             self.inject_bf_neuron_fault(fault)
         elif policy == "ber":
             self.inject_ber_bfw_fault(**fault[0])
