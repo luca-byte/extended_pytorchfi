@@ -169,13 +169,42 @@ class ExperimentRunner:
         self.fault_iterator.load_checkpoint()
 
     def _setup_file_logging(self):
-        """Adds a file handler to the logger to save logs to a file."""
+        """Saves all logs to file and keeps console output limited to XPFI."""
         log_file = os.path.join(self.workdir, "experiment.log")
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         )
-        logging.getLogger("root").addHandler(file_handler)
+
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+        xpfi_logger = logging.getLogger("XPFI")
+        xpfi_logger.setLevel(logging.INFO)
+        xpfi_logger.propagate = True
+
+        # Root should not write to console; keep console messages on XPFI only.
+        for handler in list(root_logger.handlers):
+            if isinstance(handler, logging.StreamHandler) and not isinstance(
+                handler, logging.FileHandler
+            ):
+                root_logger.removeHandler(handler)
+
+        if not any(handler.get_name() == "xpfi_console" for handler in xpfi_logger.handlers):
+            console_handler = logging.StreamHandler()
+            console_handler.set_name("xpfi_console")
+            console_handler.setFormatter(formatter)
+            xpfi_logger.addHandler(console_handler)
+
+        abs_log_file = os.path.abspath(log_file)
+        has_file_handler = any(
+            isinstance(handler, logging.FileHandler)
+            and os.path.abspath(getattr(handler, "baseFilename", "")) == abs_log_file
+            for handler in root_logger.handlers
+        )
+
+        if not has_file_handler:
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setFormatter(formatter)
+            root_logger.addHandler(file_handler)
 
     def _resolve_classes(self) -> None:
         types = self.config["injection"]["layer_types"]
@@ -222,11 +251,12 @@ class ExperimentRunner:
         logger.info("Golden Run complete.")
 
         # 2. Fault Injection Loop
+        fiter = self.fault_iterator.iter_faults()
         total_faults = len(self.fault_iterator)
         logger.info(f"Starting fault injection loop for {total_faults} faults.")
 
         for fault_record, idx in tqdm(
-            self.fault_iterator.iter_faults(), total=total_faults
+            fiter, total=total_faults
         ):
             logger.info(f"Processing fault {idx + 1}/{total_faults}...")
 
