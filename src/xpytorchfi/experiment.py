@@ -112,6 +112,7 @@ class ExperimentRunner:
         callback: ExperimentCallback,
         inference_fn: Callable[[nn.Module, Any], Any],
         deterministic: bool = True,
+        disable_logging: bool = False,
     ):
         """
         Initializes the experiment runner.
@@ -142,7 +143,8 @@ class ExperimentRunner:
         self.workdir = self.config["output_dir"]
         os.makedirs(self.workdir, exist_ok=True)
 
-        self._setup_file_logging()
+        if not disable_logging:
+            self._setup_file_logging()
 
         with open(os.path.join(self.workdir, "config.yaml"), "w") as f:
             tmp_config = deepcopy(self.config)

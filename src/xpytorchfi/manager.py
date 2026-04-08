@@ -41,6 +41,7 @@ class FaultIterator:
         self.fault_list_path = os.path.join(workdir, fault_file)
 
         self.state = CheckpointState()
+        self.fault_df = pd.DataFrame()
 
         # Ensure the working directory exists.
         os.makedirs(workdir, exist_ok=True)
@@ -124,8 +125,6 @@ class FaultIterator:
         self.save_checkpoint()
 
     def __len__(self) -> int:
-        if not hasattr(self, "fault_df"):
-            return 0
         return len(self.fault_df)
 
     def is_completed(self) -> bool:
